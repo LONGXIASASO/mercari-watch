@@ -1,0 +1,58 @@
+{
+  "_说明": "改完直接提交，下一轮生效。这是云端（GitHub Actions）版配置。",
+
+  "proxy": "",
+  "_proxy说明": "云端服务器在海外，能直连煤炉，这里必须留空。填了反而会失败",
+
+  "queries": [
+    { "label": "AND2BLE", "q": "AND2BLE ジャンハオ", "on": true },
+    { "label": "ZB1", "q": "ZB1 ジャンハオ", "on": true },
+    { "label": "ジャンハオ(宽词)", "q": "ジャンハオ", "on": true }
+  ],
+  "_queries说明": "三个词一起抓。煤炉的「最新順」实际按更新时间排，所以只要商品最近改过价/描述就会排到前面",
+
+  "must_any": ["ジャンハオ", "ジョンハオ", "チャンハオ", "章昊", "장하오", "ハオ"],
+  "_must_any说明": "标题必须命中至少一个才算他的卡",
+
+  "must_not": ["ジョンハン", "ジョシュア", "SEVENTEEN", "セブンティーン", "エスクプス"],
+  "_must_not说明": "命中就丢掉（SEVENTEEN 那几位日文名容易和ジャンハオ 混）",
+
+  "block_ids": ["2JYTGEnVmc43bcbdp2rhRQ"],
+  "_block_ids说明": "按商品 ID 精确拉黑。标题里带 ジャンハオ 但其实是多艺人套装的（如 ポンジャン 的モディセタ），用这个丢最准",
+
+  "report_hours": 1,
+  "_report_hours说明": "每轮最长往回看几小时（间隔更久时会自动放大）",
+
+  "first_hours": 24,
+  "_first_hours说明": "第一次跑时往回看几小时",
+
+  "page_hours": 24,
+  "_page_hours说明": "（旧字段，页面已改为按 retain_days 展示）",
+
+  "retain_days": 2,
+  "_retain_days说明": "页面保留最近几天「有更新」的商品（按 updated 算，老货最近改过价也算）；每轮会对这个范围内的商品复查售出状态",
+
+  "scrolls": 4,
+  "scrolls_big": 8,
+  "scrolls_all": 10,
+  "_scrolls说明": "每个词往下滚几次加载更多；时间窗超过 24 小时用 scrolls_big；精确词（all_time）用 scrolls_all 滚到底",
+
+  "include_sold": true,
+  "sold_scrolls": 3,
+  "_include_sold说明": "同时抓一轮 status=sold_out 的搜索结果，把近几天「已卖出」的商品也收进来（updated 就是卖出时间）。抓不到不影响在售那轮",
+
+  "jpy_cny_rate": 0.048,
+  "max_price_jpy": 0,
+  "imgs_max_per_run": 250,
+  "_imgs_max说明": "单轮最多下载几张商品图，防止首轮把仓库撑爆",
+
+  "img_keep_days": 7,
+  "_img_keep说明": "商品图在仓库里保留几天，超期的自动删掉，控制仓库体积",
+
+  "cloud": {
+    "enabled": true,
+    "page_url": "https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ",
+    "push_url": "https://mercari-card-watch.app.workbuddy.host/push.html?sharecode=L2A6N4ATZQ"
+  },
+  "_cloud说明": "抓完自动推进云数据库。不想推就 enabled:false"
+}

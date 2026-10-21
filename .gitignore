@@ -1,0 +1,11 @@
+node_modules/
+_raw.json
+_chrome_profile/
+*.log
+.DS_Store
+
+# 本地调试产物，不用上传
+_probe*.js
+_*.txt
+_state_b*.json
+上传到GitHub.bat

@@ -1,0 +1,14 @@
+{
+  "name": "mercari-card-watch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "煤炉小卡上新监控 · 云端定时抓取",
+  "main": "run.js",
+  "scripts": {
+    "start": "node run.js",
+    "dry": "node run.js --dry"
+  },
+  "dependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}

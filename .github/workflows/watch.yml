@@ -1,0 +1,78 @@
+name: 煤炉小卡监控
+
+# 定时说明（cron 用的是 UTC，比北京时间慢 8 小时）
+# UTC 1-17 点 = 北京时间 9:00 ~ 次日 1:00，每小时一次
+# 北京时间 2:00-8:00 不跑；9:00 那一轮会自动把前面 8 小时的新品一起补上
+on:
+  schedule:
+    - cron: '0 1-17 * * *'
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: '手动补抓：往回看几小时（留空则自动按上次运行时间推算）'
+        required: false
+        default: ''
+        type: string
+
+# 同一时间只跑一个，避免两次抓取互相覆盖
+concurrency:
+  group: mercari-card-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 缓存 Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: puppeteer-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund
+
+      - name: 抓取并推送云端
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ -n "${{ github.event.inputs.hours }}" ]; then
+            node run.js --hours "${{ github.event.inputs.hours }}"
+          else
+            node run.js
+          fi
+
+      - name: 提交商品图与状态
+        run: |
+          git config user.name "mercari-watch-bot"
+          git config user.email "mercari-watch-bot@users.noreply.github.com"
+          git add -A imgs state.json
+          if git diff --cached --quiet; then
+            echo "本轮没有图片或状态变化，跳过提交"
+            exit 0
+          fi
+          git commit --amend --no-edit
+          git push --force-with-lease origin HEAD:main
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "### 本轮抓取" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 图片库：$(ls imgs 2>/dev/null | grep -v gitkeep | wc -l) 张" >> $GITHUB_STEP_SUMMARY
+          echo "- 页面：https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ" >> $GITHUB_STEP_SUMMARY
