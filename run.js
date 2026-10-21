@@ -477,11 +477,14 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
       if (fn === '.gitkeep') continue;
       const id = fn.replace(/\.[^.]+$/, '');
       const ts = state.items[id];
-      if (!ts || ts < keepAfter) {
+      // 只有「明确知道它已经过期」才删。没有记录的（老版本留下的、或状态里漏记的）
+      // 一律保留 —— 曾经因为 sold 那批没记进 state，一次就误删了 58 张图，
+      // 数据库里 img_url 还指着这些文件，页面直接破图
+      if (ts && ts < keepAfter) {
         if (!imgMap[id]) { try { fs.unlinkSync(path.join(IMG_DIR, fn)); removed++; } catch (e) { } }
       }
     }
-  } else if (!fetchedOk && removed === 0) {
+  } else if (!fetchedOk) {
     log('本轮没抓到数据，跳过图片清理');
   }
 
