@@ -148,6 +148,18 @@ async function searchOne(browser, q, label, bag, cutoff, scrolls, ua, allTime, s
     }
 
     if (hits === 0) {
+      // 一点接口响应都没有 = 被煤炉挡了（某些机房 IP 会被拦，换个 region 就好）
+      // 把现场打出来，免得每次只看到「没抓到」三个字还得猜
+      try {
+        const diag = await page.evaluate(() => ({
+          t: document.title,
+          u: location.href.slice(0, 120),
+          n: document.body ? document.body.innerText.replace(/\s+/g, ' ').slice(0, 160) : '',
+          cards: document.querySelectorAll('[data-testid="item-grid"], li, article').length
+        }));
+        log('  页面诊断: title="' + diag.t + '" 卡片元素=' + diag.cards);
+        log('  页面文字: ' + diag.n);
+      } catch (e) { }
       log('  未捕获到接口，重载重试');
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
       await sleep(6000);
@@ -315,8 +327,20 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
 
   const state = loadState();
   const first = !(state.runs > 0);
-  let hours = parseFloat(argOf('hours', '0')) || (first ? (CFG.first_hours || 24) : (CFG.report_hours || 1));
-  if (!first && !parseFloat(argOf('hours', '0')) && state.last_run) {
+  const forcedHours = parseFloat(argOf('hours', '0'));
+
+  // 定时器每 20 分钟醒一次，但只有「距上次成功抓取超过 min_gap_minutes」才真去抓。
+  // 好处：某个机房 IP 被煤炉挡了，20 分钟后换个 runner 还能自己重试，
+  // 不会一等就是一小时；成功之后后面的几次直接秒退，不浪费额度。
+  const minGap = Math.round(Number(CFG.min_gap_minutes || 45) * 60);
+  const sinceOk = state.last_run ? (nowTs() - state.last_run) : Infinity;
+  if (!forcedHours && state.runs > 0 && sinceOk < minGap) {
+    log('距上次成功抓取 ' + Math.round(sinceOk / 60) + ' 分钟，未到 ' + Math.round(minGap / 60) + ' 分钟间隔，本轮跳过');
+    process.exit(0);
+  }
+
+  let hours = forcedHours || (first ? (CFG.first_hours || 24) : (CFG.report_hours || 1));
+  if (!first && !forcedHours && state.last_run) {
     const gap = (nowTs() - state.last_run) / 3600;
     hours = Math.max(hours, Math.min(gap, 168));
   }
@@ -441,11 +465,14 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   }
 
   // 6) 清理过期图（按「首次入库时间」算，所以更早上架的老商品也能留住图）
+  //    本轮一条没抓到时绝不动图片：那时 inWin 是空的，imgMap 也空，
+  //    照常清理会把所有图和状态全删掉（踩过：一次失败就删了 65 张）
+  const fetchedOk = all.length > 0 || allSold.length > 0;
   const keepHours = 24 * Math.max(2, Number(CFG.img_keep_days) || 7);
   const keepAfter = nowTs() - keepHours * 3600;
   let removed = 0;
   const hasHistory = Object.keys(state.items || {}).length > 0;
-  if (!DRY && hasHistory) {
+  if (!DRY && hasHistory && fetchedOk) {
     for (const fn of fs.readdirSync(IMG_DIR)) {
       if (fn === '.gitkeep') continue;
       const id = fn.replace(/\.[^.]+$/, '');
@@ -454,14 +481,19 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
         if (!imgMap[id]) { try { fs.unlinkSync(path.join(IMG_DIR, fn)); removed++; } catch (e) { } }
       }
     }
+  } else if (!fetchedOk && removed === 0) {
+    log('本轮没抓到数据，跳过图片清理');
   }
 
   // 7) 更新状态（dry 模式不改，免得影响正式轮次的时间窗）
   if (!DRY) {
     state.runs = (state.runs || 0) + 1;
-    state.last_run = nowTs();
+    // 只有真的抓到东西才推进时间窗；失败了就让它继续往后累积，
+    // 下一轮会自动放大 hours 把漏掉的那段补回来
+    if (fetchedOk) state.last_run = nowTs();
     state.items = state.items || {};
-    for (const it of inWin) {
+    // 已售商品也要记一笔，否则它们的图下一轮会被当成「无记录」删掉
+    for (const it of inWin.concat(soldIn)) {
       // 只记第一次见到的时间，别每轮刷新，否则图片永远清不掉
       if (!state.items[it.id]) state.items[it.id] = nowTs();
     }
@@ -471,8 +503,12 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   log('完成：窗内 ' + items.length + ' 条，推送' + (pushed ? '成功' : '未执行') + '，清理旧图 ' + removed + ' 张');
   if (errors.length) log('异常:', errors.join(' | '));
 
-  // 没抓到任何东西就让 job 标红，方便发现问题
-  if (all.length === 0) { log('⚠ 一条都没抓到'); process.exit(1); }
+  // 一条都没抓到：多半是这轮的机房 IP 被煤炉挡了。不标红（否则每次都给你发失败邮件），
+  // 只是不推进时间窗，20 分钟后换台机器自动重试，下一轮会把这段补回来
+  if (!fetchedOk) {
+    log('⚠ 本轮一条都没抓到（多半是这台机器 IP 被煤炉挡了），等下一轮重试');
+    process.exit(0);
+  }
 })().catch(e => {
   console.error('[watch] 致命错误:', e.stack || e.message);
   process.exit(1);
