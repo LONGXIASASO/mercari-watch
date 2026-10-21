@@ -332,9 +332,13 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   // 定时器每 20 分钟醒一次，但只有「距上次成功抓取超过 min_gap_minutes」才真去抓。
   // 好处：某个机房 IP 被煤炉挡了，20 分钟后换个 runner 还能自己重试，
   // 不会一等就是一小时；成功之后后面的几次直接秒退，不浪费额度。
-  const minGap = Math.round(Number(CFG.min_gap_minutes || 45) * 60);
+  // ⚠️ 这里不能用 `CFG.min_gap_minutes || 45`：0 在 JS 里是假值，会把「关闭节流」变回 45。
+  const minGapVal = CFG.min_gap_minutes;
+  const minGap = Math.round(
+    (minGapVal === undefined || minGapVal === null || minGapVal === '' ? 45 : Number(minGapVal)) * 60
+  );
   const sinceOk = state.last_run ? (nowTs() - state.last_run) : Infinity;
-  if (!forcedHours && state.runs > 0 && sinceOk < minGap) {
+  if (minGap > 0 && !forcedHours && state.runs > 0 && sinceOk < minGap) {
     log('距上次成功抓取 ' + Math.round(sinceOk / 60) + ' 分钟，未到 ' + Math.round(minGap / 60) + ' 分钟间隔，本轮跳过');
     process.exit(0);
   }
