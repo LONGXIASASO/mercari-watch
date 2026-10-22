@@ -511,9 +511,17 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   // 7) 更新状态（dry 模式不改，免得影响正式轮次的时间窗）
   if (!DRY) {
     state.runs = (state.runs || 0) + 1;
-    // 只有真的抓到东西才推进时间窗；失败了就让它继续往后累积，
-    // 下一轮会自动放大 hours 把漏掉的那段补回来
-    if (fetchedOk) state.last_run = nowTs();
+    /* 抓到数据 ≠ 数据已经落到用户面前。
+       云端写库失败时（如 10-22 域名 DNS 失效导致 push.html 打不开），
+       如果照常推进 last_run，漏掉的那一段就再也不会被放大补回来。
+       所以要求「抓到 + 真的写进云库」才推进；云端推送本身没启用则不拦。 */
+    const cloudOn = !!(CFG.cloud && CFG.cloud.enabled && CFG.cloud.push_url);
+    const landed = fetchedOk && (pushed || !cloudOn);
+    if (landed) {
+      state.last_run = nowTs();
+    } else if (fetchedOk) {
+      log('⚠ 本轮抓到数据但没写进云库 → 不推进 last_run，下次自动放大时间窗补回');
+    }
     state.items = state.items || {};
     // 已售商品也要记一笔，否则它们的图下一轮会被当成「无记录」删掉
     for (const it of inWin.concat(soldIn)) {
