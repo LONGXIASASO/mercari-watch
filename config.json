@@ -20,6 +20,9 @@
   "block_ids": ["2JYTGEnVmc43bcbdp2rhRQ"],
   "_block_ids说明": "按商品 ID 精确拉黑。标题里带 ジャンハオ 但其实是多艺人套装的（如 ポンジャン 的モディセタ），用这个丢最准",
 
+  "block_sellers": ["465709858"],
+  "_block_sellers说明": "按卖家 ID 整店拉黑，该卖家所有商品（在售+已售）都不入库。465709858 = ₍ᐢ‥ᐢ₎ ♡꒱ˎˊ˗，用户 10-22 报假货。查卖家 ID：卖家主页链接 /user/profile/<ID>，或在搜索结果 JSON 里看 sellerId",
+
   "report_hours": 1,
   "_report_hours说明": "每轮最长往回看几小时（间隔更久时会自动放大）",
 
