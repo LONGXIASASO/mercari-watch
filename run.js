@@ -447,7 +447,14 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
       query_label: it._q || '',
       sold: !!sold
     };
-    if (!sold) row.list_ts = itemTs(it);
+    if (!sold) {
+      row.list_ts = itemTs(it);
+      /* last_seen = 本轮搜到它的时刻，供 push.html 的 __sync 判断已售用。
+         之前是「连续 2 轮没搜到就判已售」，容错窗口 = 2 × 抓取间隔，
+         间隔改成 10 分钟后就只剩 20 分钟，热门词翻页浮动很容易误标。
+         改成按时间算（45 分钟内没再出现才判售），以后再改抓取频率不用动逻辑。 */
+      row.last_seen = new Date().toISOString();
+    }
     return row;
   };
   const items = inWin.map(it => toRow(it, false)).concat(soldIn.map(it => toRow(it, true)));
