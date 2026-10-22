@@ -428,19 +428,28 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   log('图片: 新下载 ' + imgOk + ' 张，失败 ' + imgFail + ' 张，共 ' + Object.keys(imgMap).length + ' 张有本地图');
 
   // 4) 组 payload
-  const toRow = (it, sold) => ({
-    id: it.id,
-    name: (it.name || '').slice(0, 500),
-    name_cn: toCn(it.name || ''),
-    price_jpy: Number(it.price) || 0,
-    created_ts: Number(it.created) || 0,
-    updated_ts: itemTs(it),
-    cond_id: it.itemConditionId == null ? null : Number(it.itemConditionId),
-    thumb_url: (it.thumbnails && it.thumbnails[0]) || '',
-    img_url: imgMap[it.id] || '',
-    query_label: it._q || '',
-    sold: !!sold
-  });
+  /* list_ts = 页面排序用的时间。
+     在售商品每轮跟着「更新时间」走；已售商品**故意不传这个字段**，
+     让库里保留它卖出前最后一次在售时的值 —— 这样商品卖掉时位置不动，
+     不会因为 updated 变成「卖出时刻」而冲到列表最上面（用户 10-22 反馈）。
+     push.html 的 __push 会按有没有 list_ts 分两批写，缺字段不会清空已有值。 */
+  const toRow = (it, sold) => {
+    const row = {
+      id: it.id,
+      name: (it.name || '').slice(0, 500),
+      name_cn: toCn(it.name || ''),
+      price_jpy: Number(it.price) || 0,
+      created_ts: Number(it.created) || 0,
+      updated_ts: itemTs(it),
+      cond_id: it.itemConditionId == null ? null : Number(it.itemConditionId),
+      thumb_url: (it.thumbnails && it.thumbnails[0]) || '',
+      img_url: imgMap[it.id] || '',
+      query_label: it._q || '',
+      sold: !!sold
+    };
+    if (!sold) row.list_ts = itemTs(it);
+    return row;
+  };
   const items = inWin.map(it => toRow(it, false)).concat(soldIn.map(it => toRow(it, true)));
 
   const payload = {
