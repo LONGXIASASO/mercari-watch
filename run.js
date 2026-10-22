@@ -373,7 +373,12 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   // 2) 过滤：按「更新时间」算时间窗 —— 老商品只要最近改过价/描述，一样会进来
   //    block_ids 里的商品直接丢（多艺人套装这类混进来的，按 ID 拉黑最准）
   const blocked = new Set(CFG.block_ids || []);
-  const keep = it => !blocked.has(it.id) && hitRules(it.name);
+  // block_sellers：按卖家 ID 整店拉黑（假货店等）。煤炉搜索接口每条形如 sellerId="465709858"
+  const blockedSellers = new Set((CFG.block_sellers || []).map(String));
+  const hitSeller = it => blockedSellers.size > 0 && blockedSellers.has(String(it.sellerId));
+  const bySeller = all.concat(allSold).filter(hitSeller).length;
+  if (bySeller) log('拉黑卖家命中 ' + bySeller + ' 条，全部丢弃');
+  const keep = it => !blocked.has(it.id) && !hitSeller(it) && hitRules(it.name);
   const matched = all.filter(keep);
   const inWin = matched.filter(it => itemTs(it) >= cutoff);
   inWin.sort((a, b) => itemTs(b) - itemTs(a));
