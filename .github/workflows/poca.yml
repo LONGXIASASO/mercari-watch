@@ -63,6 +63,10 @@ jobs:
             code=$(curl -sSL -o "poca/$f" -w '%{http_code}' "$BASE/$f" || true)
             if [ "$code" != "200" ]; then rm -f "poca/$f"; echo "  $f 不存在（首次运行）"; fi
           done
+          # 星标清单存在 main 分支（poca/stars.json，由页面写入）。不能放 poca-data：
+          # 那是每轮 force push 的单 commit 分支，会把它冲掉。
+          code=$(curl -sSL -o poca/stars.json -w '%{http_code}' "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/poca/stars.json" || true)
+          if [ "$code" != "200" ]; then rm -f poca/stars.json; echo "  stars.json 不存在（还没同步过星标）"; fi
           ls -la poca/
 
       - name: 判断收藏排名是否要重抓（一天一次，安排在北京 1:40 那一场）
@@ -116,6 +120,15 @@ jobs:
             exit 0
           fi
           node -e "const d=require('./poca/data.json'); console.log('条数',d.items.length,'抓取用时',d.elapsed+'s','更新于',d.at_cn)"
+
+      - name: 推送降价到钉钉
+        if: steps.night.outputs.skip != '1' && env.SKIP != '1'
+        continue-on-error: true
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          POCA_AT_MOBILES: ${{ secrets.DINGTALK_AT_MOBILES }}
+        run: node poca/notify.js
 
       - name: 发布到 poca-data 分支
         if: steps.night.outputs.skip != '1' && env.SKIP != '1'
