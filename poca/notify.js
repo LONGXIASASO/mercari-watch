@@ -63,6 +63,18 @@ const stampCn = () => {
   const d = cnNow();
   return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}-${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}`;
 };
+// state.hist 里的时间戳形如「2026-10-23T14:02」，是北京时间、不带时区后缀。
+// ⚠️ 千万别用 Date.parse：GitHub runner 是 UTC，会当成 UTC 解析，整整差 8 小时。
+const cnEpoch = s => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(s || ''));
+  if (!m) return 0;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 8 * 3600e3;
+};
+// 降价的「时间」= state.hist 里该卡最后一条记录（当前价从什么时候开始）
+const chgAt = (hist, id) => {
+  const a = hist && hist[id];
+  return a && a.length ? cnEpoch(a[a.length - 1][0]) : 0;
+};
 // 卡名互相高度相似（一大堆都以「Sequence 01: Curiosity 」开头），区别都在尾巴上，
 // 所以超长名按词从尾部收，收成「…OLIVE YOUNG LUCKY DRAW」这样才认得出来。
 function trimName(s, max = 22) {
@@ -310,10 +322,14 @@ function postJson(url, body) {
   if (nStar) console.log(`星标：${Object.keys(devices).length} 台设备，共 ${nStar} 张卡`);
 
   /* ---- 找降价 ---- */
+  // 口径：只报「本轮新增」的降价 —— 也就是还没通知过的。
+  // 基准 pushed[id] = 上次成功通知后的价格，所以同一张卡同一档价只会报一次；
+  // 上轮要是发送失败（基准没更新），这轮会补发，不会漏。
+  const pushedRef = pushed;
   const hits = [];
   for (const x of data.items) {
     const id = String(x.id);
-    const base = pushed[id] || snap[id] || null;
+    const base = pushedRef[id] || snap[id] || null;
     if (!base) continue;
     const bm = Number(base[0]) || 0;
     const bq = Number(base[1]) || 0;
@@ -333,6 +349,7 @@ function postJson(url, body) {
       u: (det[id] && det[id].u) || '',
       score: (worst.from - worst.to) / worst.from,
       stars: starMap[id] || null,
+      at: chgAt(state.hist, id),          // 这次降价是什么时候发生的，用于同跌幅时新的排前面
     });
   }
 
@@ -351,7 +368,7 @@ function postJson(url, body) {
   }
 
   // 排序：星标优先 → 跌幅大优先
-  hits.sort((a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0) || b.score - a.score);
+  hits.sort((a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0) || b.score - a.score || b.at - a.at);
   const show = hits.slice(0, MAX_LIST);
   // 两组各自成图、各自从 1 编号；卡名先剥掉同组内的公共前缀，剩下的才是能区分的那截
   const showStar = withLabel(show.filter(h => h.stars));
@@ -384,33 +401,38 @@ function postJson(url, body) {
 
   /* ---- 拼 markdown ---- */
   const link = id => SITE + (SITE.includes('#') ? '' : '#c=' + id);
-  // 一张卡三行：① 序号 + 卡名（点进单卡）② 匹配降价 ③ 速切降价
-  // 一张卡占 2~3 行：第一行「序号 + 卡名（点它跳该卡）」，下面每行一个价格
-  // （她要的是链接和价格必须分行，别挤在一行）
-  const oneLine = (h, i) => {
-    const lines = [`**${i}**　[${h.label || trimName(h.name)}](${link(h.id)})`];
+  // 一张卡：①「序号 + 卡名」（卡名可点，跳该卡）② 匹配一行 ③ 速切一行
+  // ⚠️ 钉钉 markdown 里单个 \n 不换行，会被并成同一行（她反馈过「价格和链接同一行」）。
+  //    必须留空行（\n\n）才算新段落，所以这里返回的是「带空行的行数组」。
+  const cardBlock = (h, i) => {
+    const a = [`**${i}**　[${h.label || trimName(h.name)}](${link(h.id)})`];
     for (const r of h.rows) {
       const from = yuan(r.label === '匹配' ? CNY_M(r.from) : CNY_Q(r.from));
-      lines.push(`${r.label} ${from}→${r.cny}`);
+      a.push('', `${r.label} ${from}→${r.cny}`);
     }
-    return lines.join('\n');
+    return a;
   };
 
-  // ⚠️ 钉钉 markdown 超过约 30 行就报 errcode -1「system error」
-  //   （实测 29 行能过、30 行和 41 行都挂），而她要「一卡三行、不省略」，
-  //   所以按行数装箱切成多条发：星标一组、其他一组，装不下就再加段。
-  const LINE_CAP = 18;   // 每条里卡片区能用的行数（头部 + 尾部大约占 11 行）
+  // ⚠️ 钉钉 markdown 上限：实测总行数 ~29 行 / 字节 ~1900 都安全，30 行或 3300 字节就 errcode -1。
+  //   她又要求「一卡三行、不许省略」，所以按行数+字节双约束装箱，切成多条消息发。
+  const LINE_CAP = 18;    // 每条里「卡片区」能用的元素行数（头部 8 + 尾部 2 约 10 行）
+  const BYTE_CAP = 1500;  // 每条正文的字节预算，留出余量
   const parts = [];
 
   function packGroup(list, label, img) {
     if (!list.length) return;
     const chunks = [];
-    let cur = [], lines = 0;
+    let cur = [], lines = 0, bytes = 0;
     list.forEach((h, i) => {
-      const n = h.rows.length + 1;   // 1 行卡名 + 每个价 1 行
-      if (cur.length && lines + n > LINE_CAP) { chunks.push(cur); cur = []; lines = 0; }
-      cur.push({ h, idx: i + 1 });   // 序号跟集合图上的红圈一致，跨段不重来
+      const n = 1 + 2 * h.rows.length;            // 卡名 1 行 + 每个价 2 行（价格 + 前面的空行）
+      const b = Buffer.byteLength(cardBlock(h, i + 1).join('\n'));
+      const gap = cur.length ? 1 : 0;             // 卡与卡之间还要多一个空行
+      const over = cur.length && (lines + gap + n > LINE_CAP || bytes + b > BYTE_CAP);
+      if (over) { chunks.push(cur); cur = []; lines = 0; bytes = 0; }
+      if (cur.length) { lines += 1; bytes += 2; }
+      cur.push({ h, idx: i + 1 });                // 序号跟集合图上的红圈一致，跨段不重来
       lines += n;
+      bytes += b;
     });
     if (cur.length) chunks.push(cur);
     chunks.forEach((c, i) => parts.push({
@@ -421,19 +443,20 @@ function postJson(url, body) {
   packGroup(showStar, `⭐ 星标 ${showStar.length} 张`, starUrl);
   packGroup(showOther, `其他 ${showOther.length} 张`, otherUrl);
 
-  const mds = parts.map(p => {
-    const L = [`### 🃏 卡市${TAG ? ' · ' + TAG : ''} · ${nowCn()}`];
-    L.push('');
-    L.push(`[👉 打开卡市看板](${SITE})`);
-    L.push('');
-    L.push(`**${p.label}**${p.of > 1 ? `（第 ${p.part}/${p.of} 段）` : ''}`);
-    L.push('');
-    if (p.img) { L.push(`![${p.label}](${p.img})`); L.push(''); }
-    p.items.forEach(({ h, idx }) => L.push(oneLine(h, idx)));
-    L.push('');
-    L.push(`> 监控 ${data.items.length} 张`);
+  // 每条消息：标题 → 看板链接 → 分组名 → 集合图（只第一段带） → 卡片 → 页脚
+  const buildMd = p => {
+    const L = [`### 🃏 卡市${TAG ? ' · ' + TAG : ''} · ${nowCn()}`, ''];
+    L.push(`[👉 打开卡市看板](${SITE})`, '');
+    L.push(`**${p.label}**${p.of > 1 ? `（第 ${p.part}/${p.of} 段）` : ''}`, '');
+    if (p.img) L.push(`![${p.label}](${p.img})`, '');
+    p.items.forEach(({ h, idx }, k) => {
+      if (k) L.push('');                          // 卡与卡之间空一行
+      L.push(...cardBlock(h, idx));
+    });
+    L.push('', `> 监控 ${data.items.length} 张`);
     return L.join('\n');
-  });
+  };
+  const mds = parts.map(buildMd);
 
   console.log('──────── 消息预览 ────────');
   mds.forEach((m, i) => { console.log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
