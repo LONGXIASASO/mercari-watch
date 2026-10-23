@@ -289,7 +289,10 @@ const IMG = () => 'L';
     det,
   };
   fs.writeFileSync(path.join(HERE, 'data.json'), JSON.stringify(out), 'utf8');
-  fs.writeFileSync(statePath, JSON.stringify({ at: out.at, snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])), hist }), 'utf8');
+  // ⚠️ pushed 是钉钉推送用的基准价（notify.js 维护），这里必须原样带过去，否则每轮首抓就把它冲掉
+  const nextState = { at: out.at, snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])), hist };
+  if (prevState.pushed && Object.keys(prevState.pushed).length) nextState.pushed = prevState.pushed;
+  fs.writeFileSync(statePath, JSON.stringify(nextState), 'utf8');
 
   const kb = f => (fs.statSync(path.join(HERE, f)).size / 1024).toFixed(0);
   console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB`);
