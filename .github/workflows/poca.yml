@@ -1,13 +1,16 @@
 name: Poca 卡市监控
 
-# 每小时抓一次 장하오 全量卡（约 986 张）
+# 每 20 分钟抓一次 장하오 全量卡（约 986 张），夜间 2:00-8:00 不抓
+# cron 用 UTC，比北京慢 8 小时：UTC 1-17 点 = 北京时间 9:00 ~ 次日 1:00
+#   即北京时间 2:00-8:59 不跑（和煤炉保持一致）
 # GitHub 自带 schedule 很不准（整点最挤，可能推迟几十分钟甚至跳过），
-# 所以主力是 cron-job.org 每小时 POST 一次 workflow_dispatch，schedule 只当兜底。
-# 脚本内部有「距上次成功不足 50 分钟就跳过」的节流，两个定时器撞在一起也只真跑一次。
+# 所以主力是 cron-job.org 每 20 分钟 POST 一次 workflow_dispatch，schedule 只当兜底。
+# 脚本内部有「距上次成功不足 12 分钟就跳过」的节流：两个定时器撞在一起只真跑一次；
+# 单轮抓取约 3.5 分钟，20 分钟周期下正常不会误拦。
 
 on:
   schedule:
-    - cron: '5 * * * *'
+    - cron: '*/20 1-17 * * *'
   workflow_dispatch:
     inputs:
       skip_wish:
@@ -46,22 +49,33 @@ jobs:
           done
           ls -la poca/
 
+      - name: 判断收藏排名是否要重抓（6 小时一次就够，省一半时间）
+        id: wish
+        run: |
+          SKIP=""
+          if [ -f poca/wish.json ]; then
+            SKIP=$(node -e "try{const w=require('./poca/wish.json');const h=(Date.now()-new Date(w.at))/3600000;process.stdout.write(h<6?'1':'')}catch(e){}")
+          fi
+          if [ "${{ github.event.inputs.skip_wish }}" = "true" ]; then SKIP="1"; fi
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          echo "本轮收藏排名：$([ "$SKIP" = "1" ] && echo '沿用缓存' || echo '重新抓取')"
+
       - name: 抓取 Poca
         env:
           POCA_Q: 장하오
           POCA_CONC: '16'
         run: |
-          if [ "${{ github.event.inputs.skip_wish }}" = "true" ]; then
-            node poca/poca.js --min-gap 50 --skip-wish
+          if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
+            node poca/poca.js --min-gap 12 --skip-wish
           else
-            node poca/poca.js --min-gap 50
+            node poca/poca.js --min-gap 12
           fi
 
       - name: 确认产物
         run: |
           # 被节流跳过时没有新的 data.json，直接结束本轮（不算失败）
           if [ ! -s poca/data.json ]; then
-            echo "⏭ 本轮跳过（距上次成功不足 50 分钟），没有新产物"
+            echo "⏭ 本轮跳过（距上次成功不足 12 分钟），没有新产物"
             echo "SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
