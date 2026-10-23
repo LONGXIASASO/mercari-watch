@@ -31,7 +31,7 @@ const HERE = __dirname;
 const WEBHOOK = (process.env.DINGTALK_WEBHOOK || '').trim();
 const SECRET = (process.env.DINGTALK_SECRET || '').trim();
 const SITE = (process.env.POCA_SITE || 'https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ').trim();
-const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 20);
+const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 30);
 // 测试用：POCA_NOTIFY_TAG=测试消息 时标题里会带上这个标签，免得群里误会
 const TAG = (process.env.POCA_NOTIFY_TAG || '').trim();
 const AT_MOBILES = (process.env.POCA_AT_MOBILES || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -164,10 +164,89 @@ async function buildSheet(sharp, list, outPath) {
   return true;
 }
 
-// 图片托管：raw 在国内不通，统一走 wsrv 代理；文件名带时间戳，避开 raw 的 5 分钟 CDN 缓存
-function imgUrl(file) {
-  const raw = `https://raw.githubusercontent.com/${REPO}/${BRANCH_IMG}/notify/${file}`;
-  return 'https://wsrv.nl/?url=' + encodeURIComponent(raw) + '&output=jpg&q=85';
+/* ---------------- 图片托管 ----------------
+ * ⚠️ 别放 poca-data：那是每轮 force push 的单 commit 分支，
+ *    下一轮要是没降价就不生成图，旧的会被一起冲掉（踩过：18:02 的图 18:10 就 404）。
+ *    所以改放 main 的 poca/notify/，发出去的消息长期有效。
+ * ⚠️ raw 国内直连打不开 → 主用 jsDelivr；wsrv 会把一次 404 缓存住，只当备用。
+ */
+const GH_TOKEN = (process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
+const GH_API = `https://api.github.com/repos/${REPO}/contents/`;
+const IMG_DIR = 'poca/notify';
+const IMG_KEEP_MS = 36 * 3600e3;
+
+const ghHeaders = () => ({
+  Authorization: 'Bearer ' + GH_TOKEN,
+  Accept: 'application/vnd.github+json',
+  'User-Agent': 'poca-notify',
+  'Content-Type': 'application/json',
+});
+
+async function uploadImg(file, buf) {
+  if (!GH_TOKEN) { console.log('⚠️ 没给 GITHUB_TOKEN，本轮不发图'); return ''; }
+  try {
+    const r = await fetch(GH_API + IMG_DIR + '/' + file, {
+      method: 'PUT', headers: ghHeaders(),
+      body: JSON.stringify({ message: 'notify img ' + file, content: buf.toString('base64'), branch: 'main' }),
+    });
+    if (r.status !== 201 && r.status !== 200) {
+      console.log(`⚠️ 上传集合图失败 ${file} HTTP ${r.status}`);
+      return '';
+    }
+    // 返回 commit sha：jsDelivr 用 @main 会命中长缓存、新文件要等半天，
+    // 用 @<sha> 能立刻拉到这个 commit 里的文件
+    const j = await r.json();
+    return (j && j.commit && j.commit.sha) ? j.commit.sha.slice(0, 10) : '';
+  } catch (e) { console.log('⚠️ 上传集合图异常：' + e.message); return ''; }
+}
+
+// 上传后必须真的取到图才把 URL 写进消息，否则钉钉里就是一张破图
+async function resolveUrl(file, sha) {
+  const raw = `https://raw.githubusercontent.com/${REPO}/main/${IMG_DIR}/${file}`;
+  const cands = [];
+  // wsrv 主用（实测 1 秒内就回，且加 t= 能绕过它缓存过的 404）
+  cands.push('https://wsrv.nl/?url=' + encodeURIComponent(raw) + '&output=jpg&q=85&t=' + Date.now());
+  // jsDelivr 用 @<sha> 能立刻拿到新 commit 的文件，当兜底
+  if (sha) cands.push(`https://cdn.jsdelivr.net/gh/${REPO}@${sha}/${IMG_DIR}/${file}`);
+  for (const u of cands) {
+    for (let i = 0; i < 6; i++) {
+      const r = await rawGet(u, 20000);
+      if (r.status === 200 && r.buf.length > 2000) return u;
+      await new Promise(z => setTimeout(z, 2000));
+    }
+  }
+  console.log('⚠️ 集合图 ' + file + ' 取不到，消息里就不放图了');
+  return '';
+}
+
+async function publishImg(file, localPath) {
+  const sha = await uploadImg(file, fs.readFileSync(localPath));
+  if (!sha) return '';
+  return resolveUrl(file, sha);
+}
+
+// main 上的图会一直堆，超过 36 小时的清掉
+async function pruneImgs() {
+  if (!GH_TOKEN) return;
+  try {
+    const r = await fetch(GH_API + IMG_DIR + '?ref=main', { headers: ghHeaders() });
+    if (r.status !== 200) return;
+    const list = await r.json();
+    const now = Date.now();
+    let n = 0;
+    for (const f of list) {
+      const m = /-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\.jpg$/.exec(f.name);
+      if (!m) continue;
+      const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+08:00`);
+      if (!t || now - t < IMG_KEEP_MS) continue;
+      await fetch(GH_API + IMG_DIR + '/' + f.name, {
+        method: 'DELETE', headers: ghHeaders(),
+        body: JSON.stringify({ message: 'prune ' + f.name, sha: f.sha, branch: 'main' }),
+      });
+      n++;
+    }
+    if (n) console.log(`   清理旧集合图 ${n} 张`);
+  } catch (e) {}
 }
 
 /* ---------------- 钉钉发送 ---------------- */
@@ -285,51 +364,82 @@ function postJson(url, body) {
   }
   const stamp = stampCn();
   const imgDir = path.join(HERE, 'notify');
-  // 每轮清空：poca-data 分支是 force push 的单 commit，只该留本轮这两张图
   try { fs.rmSync(imgDir, { recursive: true, force: true }); } catch (e) {}
   const starFile = `star-${stamp}.jpg`;
   const otherFile = `other-${stamp}.jpg`;
-  let hasStarImg = false, hasOtherImg = false;
+  let starUrl = '', otherUrl = '';
   if (sharp) {
-    try { hasStarImg = await buildSheet(sharp, showStar, path.join(imgDir, starFile)); }
-    catch (e) { console.log('⚠️ 星标集合图生成失败：' + e.message); }
-    try { hasOtherImg = await buildSheet(sharp, showOther, path.join(imgDir, otherFile)); }
-    catch (e) { console.log('⚠️ 其他集合图生成失败：' + e.message); }
+    try {
+      if (await buildSheet(sharp, showStar, path.join(imgDir, starFile))) {
+        starUrl = await publishImg(starFile, path.join(imgDir, starFile));
+      }
+    } catch (e) { console.log('⚠️ 星标集合图失败：' + e.message); }
+    try {
+      if (await buildSheet(sharp, showOther, path.join(imgDir, otherFile))) {
+        otherUrl = await publishImg(otherFile, path.join(imgDir, otherFile));
+      }
+    } catch (e) { console.log('⚠️ 其他集合图失败：' + e.message); }
+    await pruneImgs();
   }
 
   /* ---- 拼 markdown ---- */
   const link = id => SITE + (SITE.includes('#') ? '' : '#c=' + id);
+  // 一张卡三行：① 序号 + 卡名（点进单卡）② 匹配降价 ③ 速切降价
+  // 一张卡占 2~3 行：第一行「序号 + 卡名（点它跳该卡）」，下面每行一个价格
+  // （她要的是链接和价格必须分行，别挤在一行）
   const oneLine = (h, i) => {
-    const price = h.rows.map(r => {
+    const lines = [`**${i}**　[${h.label || trimName(h.name)}](${link(h.id)})`];
+    for (const r of h.rows) {
       const from = yuan(r.label === '匹配' ? CNY_M(r.from) : CNY_Q(r.from));
-      return `${r.label} ${from}→${r.cny}`;
-    }).join(' · ');
-    return `${i}. [${h.label || trimName(h.name)}](${link(h.id)})　${price}`;
+      lines.push(`${r.label} ${from}→${r.cny}`);
+    }
+    return lines.join('\n');
   };
 
-  let md = `### 🃏 卡市降价${TAG ? ' · ' + TAG : ''} · ${nowCn()}\n\n`;
-  md += `[👉 打开卡市看板](${SITE})\n\n`;
+  // ⚠️ 钉钉 markdown 超过约 30 行就报 errcode -1「system error」
+  //   （实测 29 行能过、30 行和 41 行都挂），而她要「一卡三行、不省略」，
+  //   所以按行数装箱切成多条发：星标一组、其他一组，装不下就再加段。
+  const LINE_CAP = 18;   // 每条里卡片区能用的行数（头部 + 尾部大约占 11 行）
+  const parts = [];
 
-  if (showStar.length) {
-    md += `**⭐ 星标降价 ${showStar.length} 张**\n\n`;
-    if (hasStarImg) md += `![星标降价](${imgUrl(starFile)})\n\n`;
-    md += showStar.map((h, i) => oneLine(h, i + 1)).join('\n') + '\n\n';
+  function packGroup(list, label, img) {
+    if (!list.length) return;
+    const chunks = [];
+    let cur = [], lines = 0;
+    list.forEach((h, i) => {
+      const n = h.rows.length + 1;   // 1 行卡名 + 每个价 1 行
+      if (cur.length && lines + n > LINE_CAP) { chunks.push(cur); cur = []; lines = 0; }
+      cur.push({ h, idx: i + 1 });   // 序号跟集合图上的红圈一致，跨段不重来
+      lines += n;
+    });
+    if (cur.length) chunks.push(cur);
+    chunks.forEach((c, i) => parts.push({
+      label, img: i === 0 ? img : '', items: c, part: i + 1, of: chunks.length,
+    }));
   }
-  if (showOther.length) {
-    md += `**其他降价 ${showOther.length} 张**\n\n`;
-    if (hasOtherImg) md += `![其他降价](${imgUrl(otherFile)})\n\n`;
-    md += showOther.map((h, i) => oneLine(h, i + 1)).join('\n') + '\n\n';
-  }
-  if (hits.length > show.length) {
-    md += `还有 ${hits.length - show.length} 张没列出，点上面看板 → 「近2日降价」看全部\n\n`;
-  }
-  md += `> ${data.at_cn || nowCn()} · 监控 ${data.items.length} 张 · 只推降价`;
+
+  packGroup(showStar, `⭐ 星标 ${showStar.length} 张`, starUrl);
+  packGroup(showOther, `其他 ${showOther.length} 张`, otherUrl);
+
+  const mds = parts.map(p => {
+    const L = [`### 🃏 卡市${TAG ? ' · ' + TAG : ''} · ${nowCn()}`];
+    L.push('');
+    L.push(`[👉 打开卡市看板](${SITE})`);
+    L.push('');
+    L.push(`**${p.label}**${p.of > 1 ? `（第 ${p.part}/${p.of} 段）` : ''}`);
+    L.push('');
+    if (p.img) { L.push(`![${p.label}](${p.img})`); L.push(''); }
+    p.items.forEach(({ h, idx }) => L.push(oneLine(h, idx)));
+    L.push('');
+    L.push(`> 监控 ${data.items.length} 张`);
+    return L.join('\n');
+  });
 
   console.log('──────── 消息预览 ────────');
-  console.log(md);
+  mds.forEach((m, i) => { console.log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
   console.log('──────────────────────────');
   if (DRY) {
-    console.log(`（--dry 模式，未发送）集合图：${hasStarImg ? starFile : '无'} / ${hasOtherImg ? otherFile : '无'}`);
+    console.log(`（--dry 模式，未发送）共 ${mds.length} 条 | 集合图：${starUrl || '无'} / ${otherUrl || '无'}`);
     return;
   }
   if (!WEBHOOK) {
@@ -337,46 +447,65 @@ function postJson(url, body) {
     return;
   }
 
-  const payload = {
-    msgtype: 'markdown',
-    markdown: { title: `🃏 卡市降价 ${hits.length} 张 · ${nowCn()}`, text: md },
-  };
-  if (AT_MOBILES.length) {
-    payload.at = { atMobiles: AT_MOBILES, isAtAll: false };
-    payload.markdown.text += '\n\n' + AT_MOBILES.map(m => '@' + m).join(' ');
-  }
-
   // 发送回执写进 state.json（会随 poca-data 发布），出问题时能回查到底发没发出去
   const saveState = () => fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
-  let r;
-  try {
-    r = await postJson(signedUrl(WEBHOOK, SECRET), payload);
-  } catch (e) {
-    console.error('❌ 钉钉请求失败：' + e.message);
-    state.lastNotify = { at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id), ok: false, err: e.message };
+
+  const sent = [];
+  let lastErr = '';
+  for (let i = 0; i < mds.length; i++) {
+    let text = mds[i];
+    if (i === 0 && AT_MOBILES.length) text += '\n\n' + AT_MOBILES.map(m => '@' + m).join(' ');
+    const title = `🃏 卡市 ${hits.length} 张${mds.length > 1 ? ` ${i + 1}/${mds.length}` : ''} · ${nowCn()}`;
+    const payload = { msgtype: 'markdown', markdown: { title, text } };
+    if (i === 0 && AT_MOBILES.length) payload.at = { atMobiles: AT_MOBILES, isAtAll: false };
+
+    // ⚠️ 钉钉会偶发返回 errcode -1「system error」（同一条隔几秒重发通常就过），
+    // 但也可能是这条太长 —— 所以每段都独立重试，别让一条失败拖垮整轮。
+    let r = { status: 0, json: { errcode: -2, errmsg: '未发送' } };
+    let attempt = 0;
+    for (; attempt < 3; attempt++) {
+      try {
+        r = await postJson(signedUrl(WEBHOOK, SECRET), payload);
+      } catch (e) {
+        console.error(`❌ 第 ${i + 1} 条请求失败（第 ${attempt + 1} 次）：` + e.message);
+        r = { status: 0, json: { errcode: -2, errmsg: e.message } };
+      }
+      const c = r.json && r.json.errcode;
+      if (r.status === 200 && c === 0) break;
+      if (attempt < 2) {
+        console.log(`   ⏳ 第 ${i + 1} 条 errcode=${c} ${(r.json && r.json.errmsg) || ''}，${3 * (attempt + 1)} 秒后重试`);
+        await new Promise(z => setTimeout(z, 3000 * (attempt + 1)));
+      }
+    }
+    const code = r.json && r.json.errcode;
+    if (r.status === 200 && code === 0) {
+      sent.push(i + 1);
+      console.log(`✅ 第 ${i + 1}/${mds.length} 条已推送（试了 ${attempt + 1} 次）`);
+    } else {
+      lastErr = `第 ${i + 1} 条 HTTP ${r.status} errcode=${code} ${(r.json && r.json.errmsg) || ''}`;
+      console.error('❌ ' + lastErr);
+    }
+    if (i < mds.length - 1) await new Promise(z => setTimeout(z, 3000));
+  }
+
+  state.lastNotify = {
+    at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id),
+    segs: mds.length, sent: sent.length,
+    imgs: [starUrl, otherUrl].filter(Boolean),
+    ok: sent.length === mds.length, err: lastErr,
+  };
+  if (!sent.length) {
     saveState();
     process.exitCode = 0;
     return;
   }
-  const code = r.json && r.json.errcode;
-  state.lastNotify = {
-    at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id),
-    imgs: [hasStarImg ? starFile : '', hasOtherImg ? otherFile : ''].filter(Boolean),
-    ok: r.status === 200 && code === 0, http: r.status, errcode: code || 0, errmsg: (r.json && r.json.errmsg) || '',
-  };
-  if (r.status === 200 && code === 0) {
-    console.log(`✅ 已推送 ${hits.length} 张降价`);
-  } else {
-    console.error(`❌ 钉钉返回异常：HTTP ${r.status} errcode=${code} ${r.json && r.json.errmsg}`);
+  if (lastErr) {
     const hint = {
       300001: 'access_token 不对，检查 webhook 是否复制完整',
       310000: '加签校验失败：检查 DINGTALK_SECRET，或机器人安全设置里是否勾了「加签」',
       130101: '发送太频繁，钉钉限流（每分钟 20 条）',
-    }[code];
+    }[/errcode=(-?\d+)/.exec(lastErr) ? /errcode=(-?\d+)/.exec(lastErr)[1] : 0];
     if (hint) console.error('   → ' + hint);
-    saveState();
-    process.exitCode = 0;
-    return;
   }
 
   // 只更新「真的告诉过她」的那些卡，被截断的下轮还会再推一次
