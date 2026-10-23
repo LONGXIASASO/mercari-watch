@@ -59,10 +59,16 @@ jobs:
 
       - name: 确认产物
         run: |
-          test -s poca/data.json || { echo "❌ 没有 data.json，本轮不发布"; exit 1; }
+          # 被节流跳过时没有新的 data.json，直接结束本轮（不算失败）
+          if [ ! -s poca/data.json ]; then
+            echo "⏭ 本轮跳过（距上次成功不足 50 分钟），没有新产物"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
           node -e "const d=require('./poca/data.json'); console.log('条数',d.items.length,'抓取用时',d.elapsed+'s','更新于',d.at_cn)"
 
       - name: 发布到 poca-data 分支
+        if: env.SKIP != '1'
         run: |
           mkdir -p /tmp/pub
           cp poca/data.json poca/state.json /tmp/pub/
