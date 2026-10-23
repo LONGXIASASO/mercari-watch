@@ -1,10 +1,10 @@
-### 🃏 卡市 · 测试消息 18:51:26 · 10-23 18:51
+### 🃏 卡市 · 测试消息 18:54:46 · 10-23 18:55
 
 [👉 打开卡市看板](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)
 
-**⭐ 星标 4 张**
+**⭐ 星标 2 张**
 
-![⭐ 星标 4 张](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fmain%2Fpoca%2Fnotify%2Fstar-20261023-1851.jpg&output=jpg&q=85&t=1792752699492)
+![⭐ 星标 2 张](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fmain%2Fpoca%2Fnotify%2Fstar-20261023-1854.jpg&output=jpg&q=85&t=1792752896082)
 
 **1**　[…Curiosity BROADCAST](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=477429)
 
@@ -12,44 +12,48 @@
 
 速切 ¥387.85→¥329.37
 
-**2**　[NEVER SAY NEVER MUVVE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=445387)
-
-匹配 ¥139.33→¥118.82
-
-**3**　[…OLIVE YOUNG LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478948)
+**2**　[…OLIVE YOUNG LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478948)
 
 速切 ¥76.38→¥65.41
 
-**4**　[…IN SEOUL ZEROSE ZONE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=407195)
-
-速切 ¥118.31→¥100.95
-
 > 监控 986 张
 ---SEG---
-### 🃏 卡市 · 测试消息 18:51:26 · 10-23 18:51
+### 🃏 卡市 · 测试消息 18:54:46 · 10-23 18:55
 
 [👉 打开卡市看板](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)
 
-**其他 4 张**
+**其他 4 张**（第 1/2 段）
 
-![其他 4 张](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fmain%2Fpoca%2Fnotify%2Fother-20261023-1851.jpg&output=jpg&q=85&t=1792752709648)
+![其他 4 张](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fmain%2Fpoca%2Fnotify%2Fother-20261023-1854.jpg&output=jpg&q=85&t=1792752902908)
 
-**1**　[…Qurious］ In Yokohama](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=488606)
+**1**　[…01: Curiosity MAKESTAR](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=480763)
 
-匹配 ¥108.56→¥93.18
+匹配 ¥65.49→¥57.28
 
-**2**　[…REUSABLE BAG](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512400)
+速切 ¥40.44→¥34.96
+
+**2**　[…01: Curiosity WHOSFAN](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478987)
+
+匹配 ¥77.79→¥67.54
+
+速切 ¥88.36→¥75.57
+
+**3**　[…MAKESTAR LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=499734)
 
 匹配 ¥323.95→¥272.67
 
-**3**　[…Stars LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512393)
+> 监控 986 张
+---SEG---
+### 🃏 卡市 · 测试消息 18:54:46 · 10-23 18:55
 
-匹配 ¥200.87→¥170.1
+[👉 打开卡市看板](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)
 
-**4**　[…01: Curiosity WITHMUU](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=498651)
+**其他 4 张**（第 2/2 段）
 
-匹配 ¥40.87→¥36.77
+**4**　[…01: Curiosity WITHMUU](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478891)
 
-速切 ¥10.49→¥9.58
+匹配 ¥90.1→¥77.79
+
+速切 ¥82.37→¥70.49
 
 > 监控 986 张
