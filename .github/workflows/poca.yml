@@ -54,6 +54,12 @@ jobs:
         with:
           node-version: '20'
 
+      # 钉钉推送要把降价卡拼成集合图，需要 sharp（有预编译二进制，约 10 秒）
+      - name: 安装 sharp（拼集合图用）
+        if: steps.night.outputs.skip != '1'
+        continue-on-error: true
+        run: npm install sharp --no-save --no-audit --no-fund
+
       - name: 取上一次的状态（poca-data 分支）
         if: steps.night.outputs.skip != '1'
         run: |
@@ -136,6 +142,9 @@ jobs:
           mkdir -p /tmp/pub
           cp poca/data.json poca/state.json /tmp/pub/
           [ -f poca/wish.json ] && cp poca/wish.json /tmp/pub/
+          # 钉钉集合图：notify.js 写在 poca/notify/，这里一并发布，消息里按
+          # raw.githubusercontent.com/<repo>/poca-data/notify/<file> 引用（外面套 wsrv 代理）
+          if [ -d poca/notify ]; then cp -r poca/notify /tmp/pub/; ls -la /tmp/pub/notify; fi
           cd /tmp/pub
           git init -q -b poca-data
           git config user.name "poca-watch-bot"
