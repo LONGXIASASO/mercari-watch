@@ -1,12 +1,10 @@
 name: 钉钉推送探针（排查用）
 
-# 只做一件事：往群里发几条最小消息，看钉钉到底报什么错。
-# 用法：Actions 里手动运行，或 dispatch 时传 tag。
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '消息里带的前缀，方便认出来'
+        description: '测试标记'
         required: false
         default: '探针'
         type: string
@@ -23,38 +21,30 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 依次发 4 种 payload
+      - name: 复刻真实消息的 3 个变体
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
-          TAG: ${{ github.event.inputs.tag }}
+          MD_B64: 'IyMjIPCfg48g5Y2h5biC6ZmN5Lu3IMK3IOa1i+ivlea2iOaBryDCtyAxMC0yMyAxODowMgoKW/CfkYkg5omT5byA5Y2h5biC55yL5p2/XShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEpCgoqKuKtkCDmmJ/moIfpmY3ku7cgMyDlvKAqKgoKIVvmmJ/moIfpmY3ku7ddKGh0dHBzOi8vd3Nydi5ubC8/dXJsPWh0dHBzJTNBJTJGJTJGcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSUyRkxPTkdYSUFTQVNPJTJGbWVyY2FyaS13YXRjaCUyRnBvY2EtZGF0YSUyRm5vdGlmeSUyRnN0YXItMjAyNjEwMjMtMTgwMi5qcGcmb3V0cHV0PWpwZyZxPTg1KQoKMS4gW+KApklOIFNFT1VMIFpFUk9TRSBaT05FXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00NTU2NDAp44CA5Yy56YWNIMKlNDcwLjHihpLCpTQwMC44NyDCtyDpgJ/liIcgwqU1NTkuMDfihpLCpTQ4Ni43MwoyLiBb4oCmMjAyNiBUSU1BIExJVkUgV0VWRVJTRV0oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NTEyMzkxKeOAgOWMuemFjSDCpTM3OS4zM+KGksKlMzIzLjk1CjMuIFvigKZJTiBTRU9VTCBaRVJPU0UgWk9ORV0oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NDA3MTk1KeOAgOmAn+WIhyDCpTExNS40MeKGksKlMTAwLjk1CgoqKuWFtuS7lumZjeS7tyA1IOW8oCoqCgohW+WFtuS7lumZjeS7t10oaHR0cHM6Ly93c3J2Lm5sLz91cmw9aHR0cHMlM0ElMkYlMkZyYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tJTJGTE9OR1hJQVNBU08lMkZtZXJjYXJpLXdhdGNoJTJGcG9jYS1kYXRhJTJGbm90aWZ5JTJGb3RoZXItMjAyNjEwMjMtMTgwMi5qcGcmb3V0cHV0PWpwZyZxPTg1KQoKMS4gW+KApk1BS0VTVEFSIE1JTkldKGh0dHBzOi8vbWVyY2FyaS1jYXJkLXdhdGNoLmFwcC53b3JrYnVkZHkuaG9zdC9wb2NhLz9zaGFyZWNvZGU9TDJBNk40QVRaUSNjPTQ5ODE3NSnjgIDljLnphY0gwqU2NC42N+KGksKlNTcuMjgKMi4gW+KApkN1cmlvc2l0eSBCUk9BRENBU1RdKGh0dHBzOi8vbWVyY2FyaS1jYXJkLXdhdGNoLmFwcC53b3JrYnVkZHkuaG9zdC9wb2NhLz9zaGFyZWNvZGU9TDJBNk40QVRaUSNjPTQ3NzQyOSnjgIDljLnphY0gwqUzNzkuMzPihpLCpTMyMy45NSDCtyDpgJ/liIcgwqUzNzguMeKGksKlMzI5LjM3CjMuIFvigKYwMTogQ3VyaW9zaXR5IE1BS0VTVEFSXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00ODA3NjMp44CA5Yy56YWNIMKlNjQuNjfihpLCpTU3LjI4IMK3IOmAn+WIhyDCpTM5LjUz4oaSwqUzNC45Ngo0LiBb4oCmMDE6IEN1cmlvc2l0eSBXSE9TRkFOXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00Nzg5ODcp44CA5Yy56YWNIMKlNzYuNzfihpLCpTY3LjU0IMK3IOmAn+WIhyDCpTg2LjIz4oaSwqU3NS41Nwo1LiBb4oCmT0xJVkUgWU9VTkcgTFVDS1kgRFJBV10oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NDc4OTQ4KeOAgOmAn+WIhyDCpTc0LjU14oaSwqU2NS40MQoKPiAyMDI2LTEwLTIzVDE4OjAwIMK3IOebkeaOpyA5ODYg5bygIMK3IOWPquaOqOmZjeS7tw=='
         run: |
-          node -e '
-          const crypto=require("crypto");
-          const WH=process.env.DINGTALK_WEBHOOK||"";
-          const SEC=process.env.DINGTALK_SECRET||"";
-          const TAG=process.env.TAG||"探针";
-          console.log("webhook 主机:", WH.split("?")[0]);
-          console.log("webhook 是否含 access_token:", /access_token=/.test(WH));
-          console.log("webhook 长度:", WH.length, "| secret 长度:", SEC.length, "| secret 前3位:", SEC.slice(0,3));
-          const url=()=>{
-            if(!SEC) return WH;
-            const ts=Date.now();
-            const sign=crypto.createHmac("sha256",SEC).update(ts+"\n"+SEC).digest("base64");
-            return WH+(WH.includes("?")?"&":"?")+"timestamp="+ts+"&sign="+encodeURIComponent(sign);
-          };
-          const post=(u,b)=>fetch(u,{method:"POST",headers:{"Content-Type":"application/json; charset=utf-8"},body:JSON.stringify(b)}).then(r=>r.text()).catch(e=>"ERR "+e.message);
-          (async()=>{
-            const cases=[
-              ["1 纯text", {msgtype:"text",text:{content:"["+TAG+"] 1 最小 text 测试"}}],
-              ["2 markdown无图", {msgtype:"markdown",markdown:{title:TAG+" 2",text:"### "+TAG+" 2\n\n纯文字无图片"}}],
-              ["3 markdown带链接", {msgtype:"markdown",markdown:{title:TAG+" 3",text:"### "+TAG+" 3\n\n[打开链接](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)"}}],
-              ["4 markdown带图", {msgtype:"markdown",markdown:{title:TAG+" 4",text:"### "+TAG+" 4\n\n![图](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fpoca-data%2Fnotify%2Fstar-20261023-1802.jpg&output=jpg&q=85)"}}],
-            ];
-            for(const [name,body] of cases){
-              const t=await post(url(),body);
-              console.log(name+" → "+String(t).slice(0,160));
-              await new Promise(r=>setTimeout(r,2500));
-            }
-          })();
-          '
+          cat > /tmp/probe.js <<'PROBE_EOF'
+const crypto=require("crypto");
+const WH=process.env.DINGTALK_WEBHOOK||"";
+const SEC=process.env.DINGTALK_SECRET||"";
+const md=Buffer.from(process.env.MD_B64,"base64").toString("utf8");
+const url=()=>{ if(!SEC) return WH; const ts=Date.now();
+  const sign=crypto.createHmac("sha256",SEC).update(ts+"\n"+SEC).digest("base64");
+  return WH+(WH.includes("?")?"&":"?")+"timestamp="+ts+"&sign="+encodeURIComponent(sign); };
+const post=(b)=>fetch(url(),{method:"POST",headers:{"Content-Type":"application/json; charset=utf-8"},body:JSON.stringify(b)}).then(r=>r.text()).catch(e=>"ERR "+e.message);
+(async()=>{
+  const noImg=md.split("\n").filter(l=>!l.trim().startsWith("![")).join("\n");
+  const asciiTitle=md.replace(/^### .*/, "### Poca price drop 2");
+  const cases=[["A_完整原样",md],["B_标题换英文",asciiTitle],["C_去掉图片行",noImg]];
+  for(const c of cases){
+    const r=await post({msgtype:"markdown",markdown:{title:"探针 "+c[0],text:c[1]}});
+    console.log(c[0]+" | 字节"+Buffer.byteLength(c[1])+" -> "+String(r).slice(0,140));
+    await new Promise(z=>setTimeout(z,3000));
+  }
+})();
+PROBE_EOF
+          node /tmp/probe.js
