@@ -1,13 +1,8 @@
 name: 钉钉推送探针（排查用）
 
+# 把 probe/md.txt 原样发到群里，用来验证渲染效果或排查 errcode。
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: '测试标记'
-        required: false
-        default: '探针'
-        type: string
 
 permissions:
   contents: read
@@ -17,34 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: 复刻真实消息的 3 个变体
+      - name: 发送
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
-          MD_B64: 'IyMjIPCfg48g5Y2h5biC6ZmN5Lu3IMK3IOa1i+ivlea2iOaBryDCtyAxMC0yMyAxODowMgoKW/CfkYkg5omT5byA5Y2h5biC55yL5p2/XShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEpCgoqKuKtkCDmmJ/moIfpmY3ku7cgMyDlvKAqKgoKIVvmmJ/moIfpmY3ku7ddKGh0dHBzOi8vd3Nydi5ubC8/dXJsPWh0dHBzJTNBJTJGJTJGcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSUyRkxPTkdYSUFTQVNPJTJGbWVyY2FyaS13YXRjaCUyRnBvY2EtZGF0YSUyRm5vdGlmeSUyRnN0YXItMjAyNjEwMjMtMTgwMi5qcGcmb3V0cHV0PWpwZyZxPTg1KQoKMS4gW+KApklOIFNFT1VMIFpFUk9TRSBaT05FXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00NTU2NDAp44CA5Yy56YWNIMKlNDcwLjHihpLCpTQwMC44NyDCtyDpgJ/liIcgwqU1NTkuMDfihpLCpTQ4Ni43MwoyLiBb4oCmMjAyNiBUSU1BIExJVkUgV0VWRVJTRV0oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NTEyMzkxKeOAgOWMuemFjSDCpTM3OS4zM+KGksKlMzIzLjk1CjMuIFvigKZJTiBTRU9VTCBaRVJPU0UgWk9ORV0oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NDA3MTk1KeOAgOmAn+WIhyDCpTExNS40MeKGksKlMTAwLjk1CgoqKuWFtuS7lumZjeS7tyA1IOW8oCoqCgohW+WFtuS7lumZjeS7t10oaHR0cHM6Ly93c3J2Lm5sLz91cmw9aHR0cHMlM0ElMkYlMkZyYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tJTJGTE9OR1hJQVNBU08lMkZtZXJjYXJpLXdhdGNoJTJGcG9jYS1kYXRhJTJGbm90aWZ5JTJGb3RoZXItMjAyNjEwMjMtMTgwMi5qcGcmb3V0cHV0PWpwZyZxPTg1KQoKMS4gW+KApk1BS0VTVEFSIE1JTkldKGh0dHBzOi8vbWVyY2FyaS1jYXJkLXdhdGNoLmFwcC53b3JrYnVkZHkuaG9zdC9wb2NhLz9zaGFyZWNvZGU9TDJBNk40QVRaUSNjPTQ5ODE3NSnjgIDljLnphY0gwqU2NC42N+KGksKlNTcuMjgKMi4gW+KApkN1cmlvc2l0eSBCUk9BRENBU1RdKGh0dHBzOi8vbWVyY2FyaS1jYXJkLXdhdGNoLmFwcC53b3JrYnVkZHkuaG9zdC9wb2NhLz9zaGFyZWNvZGU9TDJBNk40QVRaUSNjPTQ3NzQyOSnjgIDljLnphY0gwqUzNzkuMzPihpLCpTMyMy45NSDCtyDpgJ/liIcgwqUzNzguMeKGksKlMzI5LjM3CjMuIFvigKYwMTogQ3VyaW9zaXR5IE1BS0VTVEFSXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00ODA3NjMp44CA5Yy56YWNIMKlNjQuNjfihpLCpTU3LjI4IMK3IOmAn+WIhyDCpTM5LjUz4oaSwqUzNC45Ngo0LiBb4oCmMDE6IEN1cmlvc2l0eSBXSE9TRkFOXShodHRwczovL21lcmNhcmktY2FyZC13YXRjaC5hcHAud29ya2J1ZGR5Lmhvc3QvcG9jYS8/c2hhcmVjb2RlPUwyQTZONEFUWlEjYz00Nzg5ODcp44CA5Yy56YWNIMKlNzYuNzfihpLCpTY3LjU0IMK3IOmAn+WIhyDCpTg2LjIz4oaSwqU3NS41Nwo1LiBb4oCmT0xJVkUgWU9VTkcgTFVDS1kgRFJBV10oaHR0cHM6Ly9tZXJjYXJpLWNhcmQtd2F0Y2guYXBwLndvcmtidWRkeS5ob3N0L3BvY2EvP3NoYXJlY29kZT1MMkE2TjRBVFpRI2M9NDc4OTQ4KeOAgOmAn+WIhyDCpTc0LjU14oaSwqU2NS40MQoKPiAyMDI2LTEwLTIzVDE4OjAwIMK3IOebkeaOpyA5ODYg5bygIMK3IOWPquaOqOmZjeS7tw=='
-        run: |
-          cat > /tmp/probe.js <<'PROBE_EOF'
-const crypto=require("crypto");
-const WH=process.env.DINGTALK_WEBHOOK||"";
-const SEC=process.env.DINGTALK_SECRET||"";
-const md=Buffer.from(process.env.MD_B64,"base64").toString("utf8");
-const url=()=>{ if(!SEC) return WH; const ts=Date.now();
-  const sign=crypto.createHmac("sha256",SEC).update(ts+"\n"+SEC).digest("base64");
-  return WH+(WH.includes("?")?"&":"?")+"timestamp="+ts+"&sign="+encodeURIComponent(sign); };
-const post=(b)=>fetch(url(),{method:"POST",headers:{"Content-Type":"application/json; charset=utf-8"},body:JSON.stringify(b)}).then(r=>r.text()).catch(e=>"ERR "+e.message);
-(async()=>{
-  const noImg=md.split("\n").filter(l=>!l.trim().startsWith("![")).join("\n");
-  const asciiTitle=md.replace(/^### .*/, "### Poca price drop 2");
-  const cases=[["A_完整原样",md],["B_标题换英文",asciiTitle],["C_去掉图片行",noImg]];
-  for(const c of cases){
-    const r=await post({msgtype:"markdown",markdown:{title:"探针 "+c[0],text:c[1]}});
-    console.log(c[0]+" | 字节"+Buffer.byteLength(c[1])+" -> "+String(r).slice(0,140));
-    await new Promise(z=>setTimeout(z,3000));
-  }
-})();
-PROBE_EOF
-          node /tmp/probe.js
+        run: node probe/send.js
