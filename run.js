@@ -287,10 +287,9 @@ function midUrl(url) {
 }
 
 // ---------------------------------------------------------------- 推送云端
-async function pushCloud(payload, liveIds, doSync, windowDays) {
+/* 单次尝试：开一个 push.html，把本批商品 + 本轮统计写进云库 */
+async function pushOnce(payload, liveIds, doSync, windowDays) {
   const url = (CFG.cloud && CFG.cloud.push_url) || '';
-  if (!CFG.cloud || !CFG.cloud.enabled || !url) { log('云端推送未启用，跳过'); return false; }
-
   const browser = await launch(false);
   try {
     const page = await browser.newPage();
@@ -319,6 +318,26 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   } finally {
     await browser.close();
   }
+}
+
+async function pushCloud(payload, liveIds, doSync, windowDays) {
+  const url = (CFG.cloud && CFG.cloud.push_url) || '';
+  if (!CFG.cloud || !CFG.cloud.enabled || !url) { log('云端推送未启用，跳过'); return false; }
+
+  /* ⚠️ 平台后端会偶发瞬时失败：10-23 实测 items / run 步骤随机报 `{"ok":false,"error":""}`
+     （错误信息是空的，前缀发失败，不是数据问题）。
+     以前一次失败就放弃 → mw_runs 少一行 → 页面顶部「最后抓取」卡在旧时间不动。
+     现在重试 3 次，每次换一个干净的浏览器上下文重来。 */
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const ok = await pushOnce(payload, liveIds, doSync, windowDays);
+    if (ok) return true;
+    if (attempt < 3) {
+      log('⚠ 云端推送第 ' + attempt + ' 次失败，' + (attempt * 4) + ' 秒后重试');
+      await sleep(attempt * 4000);
+    }
+  }
+  log('✗ 云端推送连续 3 次失败');
+  return false;
 }
 
 // ---------------------------------------------------------------- 主流程
