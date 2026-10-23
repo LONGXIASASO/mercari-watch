@@ -190,10 +190,11 @@ const IMG = () => 'L';
   let nDown = 0, nFresh = 0, histAdded = 0;
 
   for (const r of main.list) {
-    const p = num(r.get_lowest_sell_price);                  // 1:1 最低卖价
-    const q = num(r.get_collection_lowest_sell_offer_price);  // 速购
-    const b = num(r.get_matching_price);                      // 最高求购
-    const t = num(r.get_collection_transaction_price);         // 最近成交
+    const p = num(r.get_lowest_sell_price);                  // 匹配：1:1 卖单最低价（= /sell 端点最低）
+    const q = num(r.get_collection_lowest_sell_offer_price);  // 速切：빠른구매 寄售库存最低价
+    const b = num(r.get_highest_buy_price);                   // 最高求购：구매 희망가（= /buy 端点最高）
+    const mp = num(r.get_matching_price);                     // 最近匹配成交：최근 매칭가（= /matching 端点最新一条）
+    const t = num(r.get_collection_transaction_price);         // 速切最近成交：컬렉션 거래가
     const stock = num(r.get_collection_count);
 
     const ps = prevSnap[r.id];
@@ -232,7 +233,7 @@ const IMG = () => 'L';
       mk: (r.member && r.member.name) || '',
       kind: (r.kind && (r.kind.name_en || r.kind.name)) || '',
       img: IMG(),
-      p, q, b, t, stock,
+      p, q, b, mp, t, stock,
       rd: regDate(r.image),
       rk: wishRank.get(r.id) || 0,
       chg,
