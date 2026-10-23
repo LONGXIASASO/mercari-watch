@@ -20,7 +20,10 @@ const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Geck
 const Q = process.env.POCA_Q || '장하오';
 const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发超过 8 会被限速，16 实测反而慢一倍
 const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 16); // 明细接口单条很轻，16 并发没问题
-const HIST_MAX = 20;
+// 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
+// 所以云端至少留 3 天（含窗口外 1 个基准点），单卡最多 HIST_MAX 个点控制体积。
+const HIST_MAX = 100;
+const HIST_KEEP_DAYS = 3;
 const TZ = 8 * 3600e3; // 北京时间
 
 const argOf = (n, d) => { const i = process.argv.indexOf('--' + n); return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : d; };
@@ -242,6 +245,24 @@ const IMG = () => 'L';
 
   // 清理已下榜的卡的历史，控制体积
   for (const k of Object.keys(hist)) if (!liveIds.has(String(k))) delete hist[k];
+
+  // 时间裁剪：只留最近 HIST_KEEP_DAYS 天的点（外加窗口前 1 个点当基准）
+  // 前端「近2日涨跌」是自然日口径，多留 1 天余量，避免窗口边缘的点被删掉算不出涨跌
+  {
+    const n = new Date(Date.now() + TZ);
+    const from = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()) - TZ - HIST_KEEP_DAYS * 86400000;
+    for (const k of Object.keys(hist)) {
+      const arr = hist[k];
+      if (!arr || !arr.length) { delete hist[k]; continue; }
+      let keep = arr.filter(p => Date.parse(p[0] + '+08:00') >= from);
+      if (keep.length < arr.length) {
+        const idx = arr.indexOf(keep[0]);
+        if (idx > 0) keep = [arr[idx - 1], ...keep];   // 补一个窗口外的基准点
+      }
+      if (!keep.length) keep = [arr[arr.length - 1]];
+      hist[k] = keep.slice(-HIST_MAX);
+    }
+  }
 
   // 5) 明细 + 历史合并（同名 det 结构，前端直接用）
   const det = {};
