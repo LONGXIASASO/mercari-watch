@@ -32,6 +32,8 @@ const WEBHOOK = (process.env.DINGTALK_WEBHOOK || '').trim();
 const SECRET = (process.env.DINGTALK_SECRET || '').trim();
 const SITE = (process.env.POCA_SITE || 'https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ').trim();
 const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 20);
+// 测试用：POCA_NOTIFY_TAG=测试消息 时标题里会带上这个标签，免得群里误会
+const TAG = (process.env.POCA_NOTIFY_TAG || '').trim();
 const AT_MOBILES = (process.env.POCA_AT_MOBILES || '').split(',').map(s => s.trim()).filter(Boolean);
 const DRY = process.argv.includes('--dry');
 const FORCE = process.argv.includes('--force');
@@ -305,7 +307,7 @@ function postJson(url, body) {
     return `${i}. [${h.label || trimName(h.name)}](${link(h.id)})　${price}`;
   };
 
-  let md = `### 🃏 卡市降价 · ${nowCn()}\n\n`;
+  let md = `### 🃏 卡市降价${TAG ? ' · ' + TAG : ''} · ${nowCn()}\n\n`;
   md += `[👉 打开卡市看板](${SITE})\n\n`;
 
   if (showStar.length) {
@@ -344,15 +346,24 @@ function postJson(url, body) {
     payload.markdown.text += '\n\n' + AT_MOBILES.map(m => '@' + m).join(' ');
   }
 
+  // 发送回执写进 state.json（会随 poca-data 发布），出问题时能回查到底发没发出去
+  const saveState = () => fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
   let r;
   try {
     r = await postJson(signedUrl(WEBHOOK, SECRET), payload);
   } catch (e) {
     console.error('❌ 钉钉请求失败：' + e.message);
+    state.lastNotify = { at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id), ok: false, err: e.message };
+    saveState();
     process.exitCode = 0;
     return;
   }
   const code = r.json && r.json.errcode;
+  state.lastNotify = {
+    at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id),
+    imgs: [hasStarImg ? starFile : '', hasOtherImg ? otherFile : ''].filter(Boolean),
+    ok: r.status === 200 && code === 0, http: r.status, errcode: code || 0, errmsg: (r.json && r.json.errmsg) || '',
+  };
   if (r.status === 200 && code === 0) {
     console.log(`✅ 已推送 ${hits.length} 张降价`);
   } else {
@@ -363,6 +374,7 @@ function postJson(url, body) {
       130101: '发送太频繁，钉钉限流（每分钟 20 条）',
     }[code];
     if (hint) console.error('   → ' + hint);
+    saveState();
     process.exitCode = 0;
     return;
   }
@@ -381,5 +393,4 @@ function postJson(url, body) {
   }
   state.pushed = next;
   fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
-  console.log(`   已更新推送基准 ${Object.keys(next).length} 张`);
-})().catch(e => { console.error('❌ notify 异常：' + e.message); process.exitCode = 0; });
+  console.log(`   已更新推送基准 ${Object.keys(next).length} 张`);})().catch(e => { console.error('❌ notify 异常：' + e.message); process.exitCode = 0; });
