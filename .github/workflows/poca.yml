@@ -1,0 +1,78 @@
+name: Poca 卡市监控
+
+# 每小时抓一次 장하오 全量卡（约 986 张）
+# GitHub 自带 schedule 很不准（整点最挤，可能推迟几十分钟甚至跳过），
+# 所以主力是 cron-job.org 每小时 POST 一次 workflow_dispatch，schedule 只当兜底。
+# 脚本内部有「距上次成功不足 50 分钟就跳过」的节流，两个定时器撞在一起也只真跑一次。
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+    inputs:
+      skip_wish:
+        description: '跳过收藏排名抓取（跳过后更快，排名沿用缓存）'
+        required: false
+        default: 'false'
+        type: string
+
+concurrency:
+  group: poca-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: 拉取脚本
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 取上一次的状态（poca-data 分支）
+        run: |
+          mkdir -p poca
+          BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data"
+          for f in state.json wish.json; do
+            code=$(curl -sSL -o "poca/$f" -w '%{http_code}' "$BASE/$f" || true)
+            if [ "$code" != "200" ]; then rm -f "poca/$f"; echo "  $f 不存在（首次运行）"; fi
+          done
+          ls -la poca/
+
+      - name: 抓取 Poca
+        env:
+          POCA_Q: 장하오
+          POCA_CONC: '16'
+        run: |
+          if [ "${{ github.event.inputs.skip_wish }}" = "true" ]; then
+            node poca/poca.js --min-gap 50 --skip-wish
+          else
+            node poca/poca.js --min-gap 50
+          fi
+
+      - name: 确认产物
+        run: |
+          test -s poca/data.json || { echo "❌ 没有 data.json，本轮不发布"; exit 1; }
+          node -e "const d=require('./poca/data.json'); console.log('条数',d.items.length,'抓取用时',d.elapsed+'s','更新于',d.at_cn)"
+
+      - name: 发布到 poca-data 分支
+        run: |
+          mkdir -p /tmp/pub
+          cp poca/data.json poca/state.json /tmp/pub/
+          [ -f poca/wish.json ] && cp poca/wish.json /tmp/pub/
+          cd /tmp/pub
+          git init -q -b poca-data
+          git config user.name "poca-watch-bot"
+          git config user.email "poca-watch-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "poca $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # 每轮 force push 单个 commit：仓库历史永远只有一条，不会随小时数膨胀
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/poca-data
+          echo "✅ 已发布到 poca-data"
