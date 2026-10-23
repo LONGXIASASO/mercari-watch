@@ -64,7 +64,8 @@ const stampCn = () => {
 // 卡名互相高度相似（一大堆都以「Sequence 01: Curiosity 」开头），区别都在尾巴上，
 // 所以超长名按词从尾部收，收成「…OLIVE YOUNG LUCKY DRAW」这样才认得出来。
 function trimName(s, max = 22) {
-  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  // ⚠️ 卡名里常带 [ ] ，直接塞进 [名字](链接) 会把 markdown 解析搞坏 → 换全角
+  const t = String(s || '').replace(/\s+/g, ' ').replace(/\[/g, '［').replace(/\]/g, '］').trim();
   if (t.length <= max) return t;
   const words = t.split(' ');
   let out = '';
