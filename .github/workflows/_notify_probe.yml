@@ -1,0 +1,60 @@
+name: 钉钉推送探针（排查用）
+
+# 只做一件事：往群里发几条最小消息，看钉钉到底报什么错。
+# 用法：Actions 里手动运行，或 dispatch 时传 tag。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '消息里带的前缀，方便认出来'
+        required: false
+        default: '探针'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 依次发 4 种 payload
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          node -e '
+          const crypto=require("crypto");
+          const WH=process.env.DINGTALK_WEBHOOK||"";
+          const SEC=process.env.DINGTALK_SECRET||"";
+          const TAG=process.env.TAG||"探针";
+          console.log("webhook 主机:", WH.split("?")[0]);
+          console.log("webhook 是否含 access_token:", /access_token=/.test(WH));
+          console.log("webhook 长度:", WH.length, "| secret 长度:", SEC.length, "| secret 前3位:", SEC.slice(0,3));
+          const url=()=>{
+            if(!SEC) return WH;
+            const ts=Date.now();
+            const sign=crypto.createHmac("sha256",SEC).update(ts+"\n"+SEC).digest("base64");
+            return WH+(WH.includes("?")?"&":"?")+"timestamp="+ts+"&sign="+encodeURIComponent(sign);
+          };
+          const post=(u,b)=>fetch(u,{method:"POST",headers:{"Content-Type":"application/json; charset=utf-8"},body:JSON.stringify(b)}).then(r=>r.text()).catch(e=>"ERR "+e.message);
+          (async()=>{
+            const cases=[
+              ["1 纯text", {msgtype:"text",text:{content:"["+TAG+"] 1 最小 text 测试"}}],
+              ["2 markdown无图", {msgtype:"markdown",markdown:{title:TAG+" 2",text:"### "+TAG+" 2\n\n纯文字无图片"}}],
+              ["3 markdown带链接", {msgtype:"markdown",markdown:{title:TAG+" 3",text:"### "+TAG+" 3\n\n[打开链接](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)"}}],
+              ["4 markdown带图", {msgtype:"markdown",markdown:{title:TAG+" 4",text:"### "+TAG+" 4\n\n![图](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fpoca-data%2Fnotify%2Fstar-20261023-1802.jpg&output=jpg&q=85)"}}],
+            ];
+            for(const [name,body] of cases){
+              const t=await post(url(),body);
+              console.log(name+" → "+String(t).slice(0,160));
+              await new Promise(r=>setTimeout(r,2500));
+            }
+          })();
+          '
