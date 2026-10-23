@@ -2,21 +2,25 @@
  * Poca 卡市 · 降价推送到钉钉群机器人
  *
  * 用法：node notify.js [--dry] [--force]
- *   --dry    只打印消息，不真的发送（本地调试用）
+ *   --dry    只打印消息 + 生成本地预览图，不真的发送
  *   --force  忽略「跌破上次推送价」的限制，本轮所有降价都推
  *
  * 环境变量：
  *   DINGTALK_WEBHOOK  机器人 webhook（含 access_token），必须
- *   DINGTALK_SECRET   加签密钥（SEC 开头）；机器人安全设置选的是「自定义关键词」则留空
+ *   DINGTALK_SECRET   加签密钥（SEC 开头）
  *   POCA_SITE         跳转站点，默认线上卡市
- *   POCA_NOTIFY_MAX   一条消息最多列几张卡，默认 8
+ *   POCA_NOTIFY_MAX   一条消息最多列几张卡，默认 20
  *   POCA_AT_MOBILES   要 @ 的手机号，逗号分隔（可选）
  *
  * 推送口径：
  *   只推「降价」，涨价与上新不推。
  *   同一张卡在同一个价位反复波动不重复推 —— 只有当价格「跌破上一次推送时告诉你的价」
  *   才会再推一次，避免一轮一条、一天几十条刷屏。
- *   星标卡（stars.json 里有记录的）单独排在最上面。
+ *
+ * 消息排版（务求简洁）：
+ *   ① 顶部一行：打开卡市看板
+ *   ② 星标降价卡拼成一张集合图、非星标拼一张，图上带序号
+ *   ③ 一卡一行：序号 + 卡名（超长截断）+ 人民币从多少到多少，点卡名跳该卡详情
  */
 const https = require('https');
 const fs = require('fs');
@@ -27,29 +31,140 @@ const HERE = __dirname;
 const WEBHOOK = (process.env.DINGTALK_WEBHOOK || '').trim();
 const SECRET = (process.env.DINGTALK_SECRET || '').trim();
 const SITE = (process.env.POCA_SITE || 'https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ').trim();
-const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 8);
+const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 20);
 const AT_MOBILES = (process.env.POCA_AT_MOBILES || '').split(',').map(s => s.trim()).filter(Boolean);
 const DRY = process.argv.includes('--dry');
 const FORCE = process.argv.includes('--force');
 
+const REPO = 'LONGXIASASO/mercari-watch';
+const BRANCH_IMG = 'poca-data';
+const CDN = 'https://d1sut5kn3lwnf7.cloudfront.net';
+
 // 人民币换算：与页面默认档位一致（匹配用 0715-韩1、速切用 0715-速切1）
 const CNY_M = x => (x + 2000) / 195 + 6;
-const CNY_Q = x => x / 196 + 4.5;
+const CNY_Q = x => x / 197 + 4.5;
 
-const won = n => '₩' + Number(n || 0).toLocaleString('en-US');
-const yuan = v => '¥' + (Math.round(v * 100) / 100).toFixed(2);
-const pct = (from, to) => {
-  const d = (from - to) / from * 100;
-  return (d >= 10 ? d.toFixed(0) : d.toFixed(1)) + '%';
+/* ---------------- 小工具 ---------------- */
+
+const yuan = v => {
+  const s = (Math.round(v * 100) / 100).toFixed(2).replace(/(\.\d)0$/, '$1').replace(/\.00$/, '');
+  return '¥' + s;
 };
+const won = n => '₩' + Number(n || 0).toLocaleString('en-US');
 const pad2 = n => String(n).padStart(2, '0');
+const cnNow = () => new Date(Date.now() + 8 * 3600e3);
 const nowCn = () => {
-  const d = new Date(Date.now() + 8 * 3600e3);
+  const d = cnNow();
   return `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 };
+const stampCn = () => {
+  const d = cnNow();
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}-${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}`;
+};
+// 卡名互相高度相似（一大堆都以「Sequence 01: Curiosity 」开头），区别都在尾巴上，
+// 所以超长名按词从尾部收，收成「…OLIVE YOUNG LUCKY DRAW」这样才认得出来。
+function trimName(s, max = 22) {
+  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const words = t.split(' ');
+  let out = '';
+  for (let i = words.length - 1; i >= 0; i--) {
+    const cand = out ? words[i] + ' ' + out : words[i];
+    if (cand.length > max) break;
+    out = cand;
+  }
+  if (!out) return t.slice(0, max - 1) + '…';
+  return '…' + out;
+}
+const withLabel = list => list.map(h => Object.assign({}, h, { label: trimName(h.name) }));
 
 function readJson(f, dflt) {
   try { return JSON.parse(fs.readFileSync(path.join(HERE, f), 'utf8')); } catch (e) { return dflt; }
+}
+
+function rawGet(url, timeout = 20000) {
+  return new Promise((resolve) => {
+    const req = https.get(url, { timeout, headers: { 'User-Agent': 'Mozilla/5.0', Accept: '*/*' } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        const next = new URL(res.headers.location, url).href;
+        return rawGet(next, timeout).then(resolve);
+      }
+      const bufs = [];
+      res.on('data', c => bufs.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(bufs) }));
+    });
+    req.on('error', () => resolve({ status: 0, buf: Buffer.alloc(0) }));
+    req.on('timeout', () => { req.destroy(); resolve({ status: 0, buf: Buffer.alloc(0) }); });
+  });
+}
+
+/* ---------------- 缩略图 / 集合图 ---------------- */
+
+async function fetchThumb(u) {
+  if (!u) return null;
+  const direct = await rawGet(CDN + u, 15000);
+  if (direct.status === 200 && direct.buf.length > 2000) return direct.buf;
+  // cloudfront 国内直连打不开 → 退 wsrv 代理（海外 runner 一般用不到这一步）
+  const viaProxy = await rawGet('https://wsrv.nl/?url=' + encodeURIComponent(CDN + u) + '&w=360&output=jpg&q=80', 20000);
+  if (viaProxy.status === 200 && viaProxy.buf.length > 2000) return viaProxy.buf;
+  return null;
+}
+
+/**
+ * 把一批卡拼成一张网格集合图，左上角带序号徽章。
+ * 返回 false 表示没生成（sharp 不可用 / 没有卡）。
+ */
+async function buildSheet(sharp, list, outPath) {
+  const PAD = 8, GAP = 6;
+  const n = Math.min(list.length, 20);
+  if (!n) return false;
+  // 卡少的时候格子放大，免得手机上看成一小条
+  const CW = n === 1 ? 220 : (n <= 3 ? 190 : 150);
+  const CH = Math.round(CW * 4 / 3);
+  const COLS = Math.min(5, n);
+  const ROWS = Math.ceil(n / COLS);
+  const W = COLS * CW + (COLS - 1) * GAP + PAD * 2;
+  const H = ROWS * CH + (ROWS - 1) * GAP + PAD * 2;
+
+  const layer = [];
+  const badges = [];
+  for (let i = 0; i < n; i++) {
+    const c = i % COLS, r = Math.floor(i / COLS);
+    const x = PAD + c * (CW + GAP), y = PAD + r * (CH + GAP);
+    let tile = null;
+    const buf = await fetchThumb(list[i].u);
+    if (buf) {
+      try {
+        tile = await sharp(buf).resize(CW, CH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 82 }).toBuffer();
+      } catch (e) { tile = null; }
+    }
+    if (!tile) {
+      tile = await sharp({ create: { width: CW, height: CH, channels: 3, background: '#ededed' } }).jpeg().toBuffer();
+    }
+    layer.push({ input: tile, left: x, top: y });
+    const cx = x + 19, cy = y + 19;
+    badges.push(
+      `<circle cx="${cx}" cy="${cy}" r="15" fill="#DF3363"/>` +
+      `<text x="${cx}" y="${cy + 6}" font-family="Arial, Helvetica, sans-serif" font-size="18" ` +
+      `font-weight="bold" fill="#ffffff" text-anchor="middle">${i + 1}</text>`
+    );
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${badges.join('')}</svg>`;
+  layer.push({ input: Buffer.from(svg), left: 0, top: 0 });
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  await sharp({ create: { width: W, height: H, channels: 3, background: '#ffffff' } })
+    .composite(layer)
+    .jpeg({ quality: 84 })
+    .toFile(outPath);
+  return true;
+}
+
+// 图片托管：raw 在国内不通，统一走 wsrv 代理；文件名带时间戳，避开 raw 的 5 分钟 CDN 缓存
+function imgUrl(file) {
+  const raw = `https://raw.githubusercontent.com/${REPO}/${BRANCH_IMG}/notify/${file}`;
+  return 'https://wsrv.nl/?url=' + encodeURIComponent(raw) + '&output=jpg&q=85';
 }
 
 /* ---------------- 钉钉发送 ---------------- */
@@ -96,6 +211,7 @@ function postJson(url, body) {
   const starsFile = readJson('stars.json', { devices: {} });
   const snap = state.snap || {};
   const pushed = state.pushed || {};
+  const det = data.det || {};
 
   // 星标集合：stars.json 里每台设备各自一份，这里合成 { id: [设备昵称...] }
   const starMap = {};
@@ -111,81 +227,116 @@ function postJson(url, body) {
   const nStar = Object.keys(starMap).length;
   if (nStar) console.log(`星标：${Object.keys(devices).length} 台设备，共 ${nStar} 张卡`);
 
-  // 找降价：当前价 < 上次推送价（没有推送记录时退回上一轮快照，让上线后第一轮也有意义）
+  /* ---- 找降价 ---- */
   const hits = [];
   for (const x of data.items) {
     const id = String(x.id);
     const base = pushed[id] || snap[id] || null;
     if (!base) continue;
-    const bm = Number(base[0]) || 0;   // 上次的匹配价
-    const bq = Number(base[1]) || 0;   // 上次的速切价
+    const bm = Number(base[0]) || 0;
+    const bq = Number(base[1]) || 0;
     const rows = [];
-    if (x.p > 0 && bm > 0 && (FORCE ? x.p < bm : x.p < bm)) {
-      rows.push({ label: '匹配', from: bm, to: x.p, pct: pct(bm, x.p), cny: yuan(CNY_M(x.p)) });
+    if (x.p > 0 && bm > 0 && x.p < bm) {
+      rows.push({ label: '匹配', from: bm, to: x.p, cny: yuan(CNY_M(x.p)) });
     }
-    if (x.q > 0 && bq > 0 && (FORCE ? x.q < bq : x.q < bq)) {
-      rows.push({ label: '速切', from: bq, to: x.q, pct: pct(bq, x.q), cny: yuan(CNY_Q(x.q)) });
+    if (x.q > 0 && bq > 0 && x.q < bq) {
+      rows.push({ label: '速切', from: bq, to: x.q, cny: yuan(CNY_Q(x.q)) });
     }
     if (!rows.length) continue;
-    // 跌幅最大的那条拿来排序
     const worst = rows.reduce((a, b) => ((b.from - b.to) / b.from > (a.from - a.to) / a.from ? b : a));
     hits.push({
       id: x.id,
       name: x.n || x.nk || ('#' + x.id),
-      kind: x.kind || '',
       rows,
+      u: (det[id] && det[id].u) || '',
       score: (worst.from - worst.to) / worst.from,
       stars: starMap[id] || null,
     });
   }
 
-  if (!hits.length) {
-    console.log(`✅ 本轮没有降价，不推送（已记录基准 ${Object.keys(pushed).length || Object.keys(snap).length} 张）`);
-    // 没降价也要把基准补齐，否则下次基准还停在很早以前
+  const savePushed = () => {
     const next = Object.assign({}, pushed);
     for (const x of data.items) if (!next[x.id]) next[x.id] = [x.p, x.q];
     state.pushed = next;
     fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
+    return next;
+  };
+
+  if (!hits.length) {
+    const next = savePushed();
+    console.log(`✅ 本轮没有降价，不推送（已记录基准 ${Object.keys(next).length} 张）`);
     return;
   }
 
   // 排序：星标优先 → 跌幅大优先
   hits.sort((a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0) || b.score - a.score);
-  const starred = hits.filter(h => h.stars);
-  const others = hits.filter(h => !h.stars);
+  const show = hits.slice(0, MAX_LIST);
+  // 两组各自成图、各自从 1 编号；卡名先剥掉同组内的公共前缀，剩下的才是能区分的那截
+  const showStar = withLabel(show.filter(h => h.stars));
+  const showOther = withLabel(show.filter(h => !h.stars));
+
+  /* ---- 拼集合图 ---- */
+  let sharp = null;
+  try { sharp = require('sharp'); } catch (e) {
+    console.log('⚠️ 没装 sharp，本轮不附集合图（只发文字）');
+  }
+  const stamp = stampCn();
+  const imgDir = path.join(HERE, 'notify');
+  // 每轮清空：poca-data 分支是 force push 的单 commit，只该留本轮这两张图
+  try { fs.rmSync(imgDir, { recursive: true, force: true }); } catch (e) {}
+  const starFile = `star-${stamp}.jpg`;
+  const otherFile = `other-${stamp}.jpg`;
+  let hasStarImg = false, hasOtherImg = false;
+  if (sharp) {
+    try { hasStarImg = await buildSheet(sharp, showStar, path.join(imgDir, starFile)); }
+    catch (e) { console.log('⚠️ 星标集合图生成失败：' + e.message); }
+    try { hasOtherImg = await buildSheet(sharp, showOther, path.join(imgDir, otherFile)); }
+    catch (e) { console.log('⚠️ 其他集合图生成失败：' + e.message); }
+  }
 
   /* ---- 拼 markdown ---- */
   const link = id => SITE + (SITE.includes('#') ? '' : '#c=' + id);
-  const block = h => {
-    const head = `**${h.name}**` + (h.stars ? `　⭐ ${h.stars.join('/')} 星标` : '');
-    const lines = h.rows.map(r => `${r.label} ${won(r.from)} → **${won(r.to)}**（↓${r.pct}，约 ${r.cny}）`);
-    return `> ${head}\n> ${lines.join('\n> ')}\n> [打开卡市看详情](${link(h.id)})`;
+  const oneLine = (h, i) => {
+    const price = h.rows.map(r => {
+      const from = yuan(r.label === '匹配' ? CNY_M(r.from) : CNY_Q(r.from));
+      return `${r.label} ${from}→${r.cny}`;
+    }).join(' · ');
+    return `${i}. [${h.label || trimName(h.name)}](${link(h.id)})　${price}`;
   };
 
   let md = `### 🃏 卡市降价 · ${nowCn()}\n\n`;
-  md += `> 本轮 **${hits.length}** 张降价（监控 ${data.items.length} 张）\n\n`;
-  const show = hits.slice(0, MAX_LIST);
-  const showStar = show.filter(h => h.stars);
-  const showOther = show.filter(h => !h.stars);
-  if (showStar.length) md += `**⭐ 星标卡降价 ${showStar.length} 张**\n\n` + showStar.map(block).join('\n\n') + '\n\n';
-  if (showOther.length) md += `**其他降价 ${others.length} 张**\n\n` + showOther.map(block).join('\n\n') + '\n\n';
-  if (hits.length > show.length) {
-    md += `> 还有 **${hits.length - show.length}** 张没列出，打开卡市点「近2日降价」看全部\n> [打开卡市 · 近2日降价](${SITE})\n`;
+  md += `[👉 打开卡市看板](${SITE})\n\n`;
+
+  if (showStar.length) {
+    md += `**⭐ 星标降价 ${showStar.length} 张**\n\n`;
+    if (hasStarImg) md += `![星标降价](${imgUrl(starFile)})\n\n`;
+    md += showStar.map((h, i) => oneLine(h, i + 1)).join('\n') + '\n\n';
   }
+  if (showOther.length) {
+    md += `**其他降价 ${showOther.length} 张**\n\n`;
+    if (hasOtherImg) md += `![其他降价](${imgUrl(otherFile)})\n\n`;
+    md += showOther.map((h, i) => oneLine(h, i + 1)).join('\n') + '\n\n';
+  }
+  if (hits.length > show.length) {
+    md += `还有 ${hits.length - show.length} 张没列出，点上面看板 → 「近2日降价」看全部\n\n`;
+  }
+  md += `> ${data.at_cn || nowCn()} · 监控 ${data.items.length} 张 · 只推降价`;
 
   console.log('──────── 消息预览 ────────');
   console.log(md);
   console.log('──────────────────────────');
-
-  if (DRY) { console.log('（--dry 模式，未发送）'); return; }
+  if (DRY) {
+    console.log(`（--dry 模式，未发送）集合图：${hasStarImg ? starFile : '无'} / ${hasOtherImg ? otherFile : '无'}`);
+    return;
+  }
   if (!WEBHOOK) {
-    console.log('⚠️ 没配 DINGTALK_WEBHOOK，只打印不发送。把 webhook 配到仓库 Secrets 后即可生效');
+    console.log('⚠️ 没配 DINGTALK_WEBHOOK，只打印不发送');
     return;
   }
 
   const payload = {
     msgtype: 'markdown',
-    markdown: { title: `卡市降价 ${hits.length} 张 · ${nowCn()}`, text: md },
+    markdown: { title: `🃏 卡市降价 ${hits.length} 张 · ${nowCn()}`, text: md },
   };
   if (AT_MOBILES.length) {
     payload.at = { atMobiles: AT_MOBILES, isAtAll: false };
@@ -197,7 +348,7 @@ function postJson(url, body) {
     r = await postJson(signedUrl(WEBHOOK, SECRET), payload);
   } catch (e) {
     console.error('❌ 钉钉请求失败：' + e.message);
-    process.exitCode = 0;   // 不影响抓取与发布
+    process.exitCode = 0;
     return;
   }
   const code = r.json && r.json.errcode;
@@ -205,7 +356,6 @@ function postJson(url, body) {
     console.log(`✅ 已推送 ${hits.length} 张降价`);
   } else {
     console.error(`❌ 钉钉返回异常：HTTP ${r.status} errcode=${code} ${r.json && r.json.errmsg}`);
-    // 常见错误码提示
     const hint = {
       300001: 'access_token 不对，检查 webhook 是否复制完整',
       310000: '加签校验失败：检查 DINGTALK_SECRET，或机器人安全设置里是否勾了「加签」',
@@ -231,4 +381,4 @@ function postJson(url, body) {
   state.pushed = next;
   fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
   console.log(`   已更新推送基准 ${Object.keys(next).length} 张`);
-})().catch(e => { console.error('❌ notify 异常：', e.message); process.exitCode = 0; });
+})().catch(e => { console.error('❌ notify 异常：' + e.message); process.exitCode = 0; });
