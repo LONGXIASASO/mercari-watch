@@ -1,29 +1,49 @@
-### 🃏 卡市降价 · 测试消息 · 10-23 18:02
+### 🃏 卡市降价 · 测试消息 · 10-23 18:20
 
 [👉 打开卡市看板](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ)
 
-**⭐ 星标降价 3 张**
+**⭐ 星标降价 4 张**
 
-![星标降价](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fpoca-data%2Fnotify%2Fstar-20261023-1802.jpg&output=jpg&q=85)
+![星标降价](https://cdn.jsdelivr.net/gh/LONGXIASASO/mercari-watch@cae6d071ba/poca/notify/star-20261023-1819.jpg)
 
-**1**　[…IN SEOUL ZEROSE ZONE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=455640)　匹配 ¥470.1→¥400.87 · 速切 ¥559.07→¥486.73
+**1**　[…Curiosity BROADCAST](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=477429)　匹配 ¥385.49→¥323.95 · 速切 ¥387.85→¥329.37
 
-**2**　[…2026 TIMA LIVE WEVERSE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512391)　匹配 ¥379.33→¥323.95
+**2**　[NEVER SAY NEVER MUVVE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=445387)　匹配 ¥139.33→¥118.82
 
-**3**　[…IN SEOUL ZEROSE ZONE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=407195)　速切 ¥115.41→¥100.95
+**3**　[…OLIVE YOUNG LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478948)　速切 ¥76.38→¥65.41
 
-**其他降价 5 张**
+**4**　[…IN SEOUL ZEROSE ZONE](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=407195)　速切 ¥118.31→¥100.95
 
-![其他降价](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fpoca-data%2Fnotify%2Fother-20261023-1802.jpg&output=jpg&q=85)
+**其他降价 14 张**
 
-**1**　[…MAKESTAR MINI](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=498175)　匹配 ¥64.67→¥57.28
+![其他降价](https://wsrv.nl/?url=https%3A%2F%2Fraw.githubusercontent.com%2FLONGXIASASO%2Fmercari-watch%2Fmain%2Fpoca%2Fnotify%2Fother-20261023-1819.jpg&output=jpg&q=85&t=1792750791503)
 
-**2**　[…Curiosity BROADCAST](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=477429)　匹配 ¥379.33→¥323.95 · 速切 ¥378.1→¥329.37
+**1**　[…Qurious］ In Yokohama](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=488606)　匹配 ¥108.56→¥93.18
 
-**3**　[…01: Curiosity MAKESTAR](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=480763)　匹配 ¥64.67→¥57.28 · 速切 ¥39.53→¥34.96
+**2**　[…REUSABLE BAG](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512400)　匹配 ¥323.95→¥272.67
 
-**4**　[…01: Curiosity WHOSFAN](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478987)　匹配 ¥76.77→¥67.54 · 速切 ¥86.23→¥75.57
+**3**　[…Stars LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512393)　匹配 ¥200.87→¥170.1
 
-**5**　[…OLIVE YOUNG LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=478948)　速切 ¥74.55→¥65.41
+**4**　[…01: Curiosity WITHMUU](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=498651)　匹配 ¥40.87→¥36.77 · 速切 ¥10.49→¥9.58
 
-> 2026-10-23T18:00 · 监控 986 张 · 只推降价
+**5**　[…WITHMUU LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=497446)　匹配 ¥139.33→¥118.82
+
+**6**　[…Mnet Plus Merch](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=447263)　匹配 ¥385.49→¥323.95
+
+**7**　[…Stars LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=512392)　匹配 ¥200.87→¥170.1
+
+**8**　[…WITHMUU LUCKY DRAW](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=128935)　匹配 ¥40.87→¥36.77 · 速切 ¥22.47→¥19.73
+
+**9**　[colorgram](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=293624)　匹配 ¥22.41→¥21.38 · 速切 ¥22.47→¥19.73
+
+**10**　[…NEVER DIGIPACK Ver.](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=396611)　匹配 ¥19.33→¥18.82 · 速切 ¥7.49→¥7.04
+
+**11**　[…01: Curiosity YETIMALL](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=497453)　匹配 ¥96.26→¥82.92 · 速切 ¥103.33→¥88.26
+
+**12**　[…ZEROSE Ver. APPLEMUSIC](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=335412)　速切 ¥124.3→¥106.02
+
+**13**　[…SAY NEVER MUSIC KOREA](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=411313)　速切 ¥40.44→¥34.96
+
+**14**　[BLUE PARADISE MUSICART](https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ#c=335398)　速切 ¥25.46→¥22.27
+
+> 2026-10-23T14:10 · 监控 986 张 · 只推降价
