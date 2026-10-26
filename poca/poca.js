@@ -18,6 +18,11 @@ const HERE = __dirname;
 const HOST = 'api.phocamarket.com';
 const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 const Q = process.env.POCA_Q || '장하오';
+// 额外固定监控的卡：不在关键词搜索结果里，也要跟主列表一起抓、一起算涨跌、一起推送。
+// 短链 app.phocamarket.com/xxxxxxx 用移动端 UA 请求一次就能解出卡 id（Location 里的 /findphoca/<id>）。
+// 436791 = RICKY · NEVER SAY NEVER 메이크스타（2026-01-12 特典）
+const PIN_IDS = String(process.env.POCA_PIN || '436791')
+  .split(',').map(s => s.trim()).filter(Boolean);
 const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发超过 8 会被限速，16 实测反而慢一倍
 const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 16); // 明细接口单条很轻，16 并发没问题
 // 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
@@ -134,6 +139,20 @@ async function fetchDetails(ids) {
   return out;
 }
 
+// ── 固定监控卡补抓（接口字段与搜索结果同结构，可直接混进 main.list） ──
+async function fetchPinned(list) {
+  if (!PIN_IDS.length) return [];
+  const have = new Set(list.map(r => String(r.id)));
+  const out = [];
+  for (const id of PIN_IDS) {
+    if (have.has(String(id))) continue;      // 搜索里已经带了就不重复加
+    const c = await getJson(`/card/v1/${id}`);
+    if (c && c.id) out.push(c);
+    else console.log(`  ⚠️ 固定卡 ${id} 拉取失败，本轮先跳过`);
+  }
+  return out;
+}
+
 const IMG = () => 'L';
 
 (async () => {
@@ -158,6 +177,13 @@ const IMG = () => 'L';
   // 1) 搜索（默认序 = 实时交易顺）
   const main = await fetchAll('');
   console.log(`搜索完成 ${main.list.length}/${main.count} 条，${Math.round((Date.now() - t0) / 1000)}s`);
+
+  // 1.5) 固定监控卡（例如短链分享过来的别的成员的卡）：搜索抓不到就单独补，混进同一份列表
+  const pinned = await fetchPinned(main.list);
+  if (pinned.length) {
+    main.list.push(...pinned);
+    console.log(`固定监控卡补入 ${pinned.length} 张：${pinned.map(x => x.id).join(', ')}，合计 ${main.list.length} 张`);
+  }
 
   // 2) 收藏排名（变化慢，6 小时内直接用缓存，省一半抓取时间）
   let wishRank = new Map();
