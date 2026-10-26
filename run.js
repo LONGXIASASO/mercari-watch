@@ -340,6 +340,91 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
   return false;
 }
 
+// ---------------------------------------------------------------- 静态快照（GitHub 版）
+/* 2026-10-26 起的主链路：抓完直接写成仓库根目录的 mw.json，页面从 GitHub 读。
+   起因：云开发资源点耗尽后数据库被平台隔离（402 DATABASE_RESOURCE_ISOLATED），
+   页面整个读不出商品。这条路不经过云库 —— 不消耗资源点，也不存在到期/欠费/隔离。
+   云库那条（push.html）保留为备胎，config.cloud.enabled 关掉即完全不走。 */
+const SNAP_PATH = path.join(ROOT, 'mw.json');
+const RETAIN_DAYS = Number(CFG.retain_days) || 2;
+// 多久没再搜到才判已售（与 push.html 的 __sync 口径一致：按时间算，与抓取频率无关）
+const SOLD_GAP = 45 * 60;
+
+function loadSnap() {
+  try {
+    const s = JSON.parse(fs.readFileSync(SNAP_PATH, 'utf8'));
+    return {
+      at: s.at || null,
+      items: Array.isArray(s.items) ? s.items : [],
+      runs: Array.isArray(s.runs) ? s.runs : []
+    };
+  } catch (e) { return { at: null, items: [], runs: [] }; }
+}
+
+/* 合并「旧快照 + 本轮商品 + 判售」，产出新快照。
+   liveIds = 本轮在售搜到的全部 id（含被规则刷掉的，和云库版 __sync 口径一致）。
+   canSync = false（有个词抓失败）时不判售，免得把「没翻到」的误标成卖掉。 */
+function buildSnap(prev, fresh, liveIds, canSync, runRow) {
+  const now = nowTs();
+  const from = now - RETAIN_DAYS * 86400;
+  const live = new Set((liveIds || []).map(String));
+  const bag = new Map();
+
+  // ① 旧快照里还在保留期的先留着（口径＝updated_ts，和页面读取一致）
+  for (const it of prev.items) {
+    if (!it || !it.id) continue;
+    if ((Number(it.updated_ts) || 0) >= from) bag.set(String(it.id), it);
+  }
+
+  // ② 本轮商品覆盖上去。已售商品不带 list_ts → 沿用旧的冻结值，
+  //    这样它卖掉时位置不动（和云库 upsert「缺字段不改该列」同一个效果）
+  let soldNow = 0, backOn = 0;
+  for (const it of fresh) {
+    const old = bag.get(String(it.id));
+    if (old) {
+      if (it.list_ts == null && old.list_ts != null) it.list_ts = old.list_ts;
+      // 之前判过已售、这轮又在在售里抓到 → 恢复（卖家撤销售出/误判）
+      if (old.sold && !it.sold) backOn++;
+    }
+    bag.set(String(it.id), it);
+  }
+
+  // ③ 判售
+  if (canSync) {
+    for (const it of bag.values()) {
+      const id = String(it.id);
+      if (live.has(id)) {
+        // 又在在售里搜到了：之前误判的恢复回来
+        if (it.sold) { it.sold = false; it.miss_count = 0; backOn++; }
+        continue;
+      }
+      if (it.sold) continue;                          // 已判过 / 抓的时候就是已售
+      const t = it.last_seen ? Date.parse(it.last_seen) / 1000 : 0;
+      if (!t) continue;                               // 没有时间记录，绝不判售
+      if (now - t >= SOLD_GAP) { it.sold = true; it.miss_count = 2; soldNow++; }
+      else if (!it.miss_count) it.miss_count = 1;
+    }
+  }
+
+  // ④ 排序并截断（页面本来就只显示保留期内的，按更新时间倒序）
+  const items = [...bag.values()]
+    .filter(it => (Number(it.updated_ts) || 0) >= from)
+    .sort((a, b) => (Number(b.updated_ts) || 0) - (Number(a.updated_ts) || 0))
+    .slice(0, 1200);
+
+  const runs = [runRow].concat(prev.runs || []).slice(0, 14);
+
+  return {
+    at: new Date(now * 1000).toISOString(),
+    at_ts: now,
+    window_days: RETAIN_DAYS,
+    items,
+    runs,
+    sold_now: soldNow,
+    back_on: backOn
+  };
+}
+
 // ---------------------------------------------------------------- 主流程
 (async () => {
   fs.mkdirSync(IMG_DIR, { recursive: true });
@@ -496,19 +581,42 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
 
   fs.writeFileSync(RAW_PATH, JSON.stringify({ fetched_at: nowTs(), hours, errors, items }, null, 1), 'utf8');
 
-  // 5) 推云端 + 售出状态同步
-  // 本轮只要有一个词抓失败，就不做售出判定 —— 免得把「没翻到」的商品误标成已售
+  // 5) 写静态快照 mw.json（页面主数据源，不经过云库）
+  //    本轮只要有一个词抓失败，就不做售出判定 —— 免得把「没翻到」的商品误标成已售
   const canSync = errors.length === 0;
+  const runRow = {
+    ran_at: new Date(nowTs() * 1000).toISOString(),
+    win_hours: hours,
+    fetched: all.length + allSold.length,
+    matched: matched.length + matchedSold.length,
+    fresh: items.length
+  };
+  const prevSnap = loadSnap();
+  const snap = buildSnap(prevSnap, items, all.map(x => x.id), canSync, runRow);
+  let snapOk = false, snapKB = 0;
+  if (!DRY) {
+    try {
+      fs.writeFileSync(SNAP_PATH, JSON.stringify(snap), 'utf8');
+      snapKB = Math.round(fs.statSync(SNAP_PATH).size / 1024);
+      snapOk = true;
+      log('静态快照 mw.json: ' + snap.items.length + ' 条 / ' + snapKB + 'KB'
+        + '（新判售 ' + snap.sold_now + '，恢复在售 ' + snap.back_on + '）');
+    } catch (e) {
+      log('✗ 写 mw.json 失败:', e.message);
+    }
+  }
+
+  // 6) 推云端（备胎，config.cloud.enabled 关掉就完全不走）+ 售出状态同步
   let pushed = false;
   if (!DRY && (items.length || canSync)) {
     pushed = await pushCloud(payload, all.map(x => x.id), canSync, Number(CFG.retain_days) || 2);
   } else if (!DRY) {
-    log('本轮抓取有异常，跳过推送与售出判定');
+    log('本轮抓取有异常，跳过云库推送与售出判定');
   } else if (!items.length) {
     log('本轮无窗内商品');
   }
 
-  // 6) 清理过期图（按「首次入库时间」算，所以更早上架的老商品也能留住图）
+  // 7) 清理过期图（按「首次入库时间」算，所以更早上架的老商品也能留住图）
   //    本轮一条没抓到时绝不动图片：那时 inWin 是空的，imgMap 也空，
   //    照常清理会把所有图和状态全删掉（踩过：一次失败就删了 65 张）
   const fetchedOk = all.length > 0 || allSold.length > 0;
@@ -532,15 +640,16 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
     log('本轮没抓到数据，跳过图片清理');
   }
 
-  // 7) 更新状态（dry 模式不改，免得影响正式轮次的时间窗）
+  // 8) 更新状态（dry 模式不改，免得影响正式轮次的时间窗）
   if (!DRY) {
     state.runs = (state.runs || 0) + 1;
     /* 抓到数据 ≠ 数据已经落到用户面前。
        云端写库失败时（如 10-22 域名 DNS 失效导致 push.html 打不开），
        如果照常推进 last_run，漏掉的那一段就再也不会被放大补回来。
-       所以要求「抓到 + 真的写进云库」才推进；云端推送本身没启用则不拦。 */
+       所以要求「抓到 + 真的落地」才推进：静态快照写成功即可，
+       若同时开了云库推送，则还要求云库也写成功。 */
     const cloudOn = !!(CFG.cloud && CFG.cloud.enabled && CFG.cloud.push_url);
-    const landed = fetchedOk && (pushed || !cloudOn);
+    const landed = fetchedOk && snapOk && (pushed || !cloudOn);
     if (landed) {
       state.last_run = nowTs();
     } else if (fetchedOk) {
@@ -555,7 +664,8 @@ async function pushCloud(payload, liveIds, doSync, windowDays) {
     saveState(state);
   }
 
-  log('完成：窗内 ' + items.length + ' 条，推送' + (pushed ? '成功' : '未执行') + '，清理旧图 ' + removed + ' 张');
+  log('完成：窗内 ' + items.length + ' 条，快照' + (snapOk ? '已写 ' + snapKB + 'KB' : '未写')
+    + '，云库' + (pushed ? '成功' : '未走') + '，清理旧图 ' + removed + ' 张');
   if (errors.length) log('异常:', errors.join(' | '));
 
   // 一条都没抓到：多半是这轮的机房 IP 被煤炉挡了。不标红（否则每次都给你发失败邮件），
