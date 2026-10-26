@@ -56,9 +56,9 @@
   "_img_keep说明": "商品图在仓库里保留几天，超期的自动删掉，控制仓库体积",
 
   "cloud": {
-    "enabled": true,
+    "enabled": false,
     "page_url": "https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ",
     "push_url": "https://mercari-card-watch.app.workbuddy.host/push.html?sharecode=L2A6N4ATZQ"
   },
-  "_cloud说明": "抓完自动推进云数据库。不想推就 enabled:false"
+  "_cloud说明": "抓完自动推进云数据库。2026-10-26 起默认关闭：云开发资源点用完、数据库被平台隔离（402 DATABASE_RESOURCE_ISOLATED），改走仓库根目录的 mw.json（页面直读 GitHub）。哪天云库恢复或充了会员，把 enabled 改回 true 它就自动恢复双写，两条路并存互不影响"
 }
