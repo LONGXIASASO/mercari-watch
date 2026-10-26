@@ -62,7 +62,7 @@ jobs:
       - name: 安装依赖
         run: npm install --no-audit --no-fund
 
-      - name: 抓取并推送云端
+      - name: 抓取并写出静态快照
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
@@ -72,24 +72,28 @@ jobs:
             node run.js
           fi
 
-      - name: 提交商品图与状态
+      - name: 提交商品图、状态与快照
         run: |
           git config user.name "mercari-watch-bot"
           git config user.email "mercari-watch-bot@users.noreply.github.com"
           # 两轮撞在一起时（GitHub 自己的定时器和外部定时器同时醒），
           # 原来的 --force-with-lease 会因为「stale info」被拒，这轮下载的图就白丢了。
-          # 现在的做法：先把本轮写好的 state.json 挪到一边 → 硬重置到远端最新
-          # （新下载的图是未跟踪文件，硬重置不会删它们）→ 把 state.json 放回来 →
-          # amend 到同一个 commit 上推走。最多试 3 次。
-          # 用 --amend 是为了让仓库永远只有一个 commit，历史不随轮次膨胀。
+          # 现在的做法：先把本轮写好的 state.json / mw.json 挪到一边 → 硬重置到远端最新
+          # （新下载的图是未跟踪文件，硬重置不会删它们）→ 放回来 → amend 到同一个 commit 上推走。
+          # 最多试 3 次。用 --amend 是为了让仓库永远只有一个 commit，历史不随轮次膨胀。
+          #
+          # ⚠️ mw.json 是页面唯一的数据源（2026-10-26 起不走云库），
+          #    必须和 state.json 一样先备份再 reset，否则这轮的数据会被远端的旧版覆盖回去。
           cp state.json /tmp/state.new.json
+          cp mw.json /tmp/mw.new.json
           for i in 1 2 3; do
             git fetch origin main
             git reset --hard origin/main
             cp /tmp/state.new.json state.json
-            git add -A imgs state.json
+            cp /tmp/mw.new.json mw.json
+            git add -A imgs state.json mw.json
             if git diff --cached --quiet; then
-              echo "本轮没有图片或状态变化，跳过提交"
+              echo "本轮没有图片、状态或快照变化，跳过提交"
               exit 0
             fi
             git commit --amend --no-edit
@@ -100,7 +104,7 @@ jobs:
             echo "第 $i 次尝试：远端刚被别人推过，5 秒后重试"
             sleep 5
           done
-          echo "⚠ 三次都没推上去，这轮的图片下次会被补回（已写进数据库的数据不受影响）"
+          echo "⚠ 三次都没推上去，这轮的数据下次会被补回"
 
       - name: 汇总
         if: always()
@@ -108,4 +112,5 @@ jobs:
           echo "### 本轮抓取" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- 图片库：$(ls imgs 2>/dev/null | grep -v gitkeep | wc -l) 张" >> $GITHUB_STEP_SUMMARY
+          echo "- 快照：$(ls -lh mw.json 2>/dev/null | awk '{print $5}')（$(node -e "try{const s=require('./mw.json');console.log(s.items.length+' 条 / 更新 '+s.at)}catch(e){console.log('无')}")）" >> $GITHUB_STEP_SUMMARY
           echo "- 页面：https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ" >> $GITHUB_STEP_SUMMARY
