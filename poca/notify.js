@@ -13,7 +13,8 @@
  *   POCA_AT_MOBILES   要 @ 的手机号，逗号分隔（可选）
  *
  * 推送口径：
- *   只推「降价」，涨价与上新不推。
+ *   只推「降价」和「新上架」，涨价不推。
+ *   新上架 = 上一轮还一档报价都没有（匹配、速切都是 0），这轮有价了；它不算涨价。
  *   同一张卡在同一个价位反复波动不重复推 —— 只有当价格「跌破上一次推送时告诉你的价」
  *   才会再推一次，避免一轮一条、一天几十条刷屏。
  *
@@ -32,6 +33,8 @@ const WEBHOOK = (process.env.DINGTALK_WEBHOOK || '').trim();
 const SECRET = (process.env.DINGTALK_SECRET || '').trim();
 const SITE = (process.env.POCA_SITE || 'https://mercari-card-watch.app.workbuddy.host/poca/?sharecode=L2A6N4ATZQ').trim();
 const MAX_LIST = Number(process.env.POCA_NOTIFY_MAX || 30);
+// 新上架一次可能来很多（卖家批量挂单），单独设上限，免得一口气刷几十条
+const NEW_MAX = Number(process.env.POCA_NOTIFY_NEW_MAX || 15);
 // 测试用：POCA_NOTIFY_TAG=测试消息 时标题里会带上这个标签，免得群里误会
 const TAG = (process.env.POCA_NOTIFY_TAG || '').trim();
 const AT_MOBILES = (process.env.POCA_AT_MOBILES || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -321,18 +324,21 @@ function postJson(url, body) {
   const nStar = Object.keys(starMap).length;
   if (nStar) console.log(`星标：${Object.keys(devices).length} 台设备，共 ${nStar} 张卡`);
 
-  /* ---- 找降价 ---- */
-  // 口径：只报「本轮新增」的降价 —— 也就是还没通知过的。
+  /* ---- 找降价 / 新上架 ---- */
+  // 口径：只报「本轮新增」的变化 —— 也就是还没通知过的。
   // 基准 pushed[id] = 上次成功通知后的价格，所以同一张卡同一档价只会报一次；
   // 上轮要是发送失败（基准没更新），这轮会补发，不会漏。
+  // ⚠️ 「无报价 → 有报价」算新上架，不算涨价（涨价必须两边都有价且变贵）。
   const pushedRef = pushed;
   const hits = [];
+  const nwHits = [];
   for (const x of data.items) {
     const id = String(x.id);
     const base = pushedRef[id] || snap[id] || null;
     if (!base) continue;
     const bm = Number(base[0]) || 0;
     const bq = Number(base[1]) || 0;
+    const at = chgAt(state.hist, id);   // 这次变动是什么时候发生的，用于同档位时新的排前面
     const rows = [];
     if (x.p > 0 && bm > 0 && x.p < bm) {
       rows.push({ label: '匹配', from: bm, to: x.p, cny: yuan(CNY_M(x.p)) });
@@ -340,39 +346,66 @@ function postJson(url, body) {
     if (x.q > 0 && bq > 0 && x.q < bq) {
       rows.push({ label: '速切', from: bq, to: x.q, cny: yuan(CNY_Q(x.q)) });
     }
-    if (!rows.length) continue;
-    const worst = rows.reduce((a, b) => ((b.from - b.to) / b.from > (a.from - a.to) / a.from ? b : a));
-    hits.push({
-      id: x.id,
-      name: x.n || x.nk || ('#' + x.id),
-      rows,
-      u: (det[id] && det[id].u) || '',
-      score: (worst.from - worst.to) / worst.from,
-      stars: starMap[id] || null,
-      at: chgAt(state.hist, id),          // 这次降价是什么时候发生的，用于同跌幅时新的排前面
-    });
+    if (rows.length) {
+      const worst = rows.reduce((a, b) => ((b.from - b.to) / b.from > (a.from - a.to) / a.from ? b : a));
+      hits.push({
+        id: x.id,
+        name: x.n || x.nk || ('#' + x.id),
+        rows,
+        u: (det[id] && det[id].u) || '',
+        score: (worst.from - worst.to) / worst.from,
+        stars: starMap[id] || null,
+        at,
+      });
+      continue;
+    }
+    // 之前一档报价都没有，这轮有价了 → 新上架（不写「→」，因为本来没价）
+    if (bm === 0 && bq === 0 && (x.p > 0 || x.q > 0)) {
+      const nrows = [];
+      if (x.p > 0) nrows.push({ label: '匹配', from: 0, to: x.p, cny: yuan(CNY_M(x.p)) });
+      if (x.q > 0) nrows.push({ label: '速切', from: 0, to: x.q, cny: yuan(CNY_Q(x.q)) });
+      nwHits.push({
+        id: x.id,
+        name: x.n || x.nk || ('#' + x.id),
+        rows: nrows,
+        u: (det[id] && det[id].u) || '',
+        score: 0,
+        stars: starMap[id] || null,
+        at,
+      });
+    }
   }
 
   const savePushed = () => {
     const next = Object.assign({}, pushed);
-    for (const x of data.items) if (!next[x.id]) next[x.id] = [x.p, x.q];
+    for (const x of data.items) {
+      if (!next[x.id]) { next[x.id] = [x.p, x.q]; continue; }
+      // 变成「无报价」了就把基准清零：等它重新有人挂单时，就能按「新上架」再报一次
+      if (!(x.p > 0) && !(x.q > 0)) next[x.id] = [0, 0];
+    }
     state.pushed = next;
     fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
     return next;
   };
 
-  if (!hits.length) {
+  const total = hits.length + nwHits.length;
+  if (!total) {
     const next = savePushed();
-    console.log(`✅ 本轮没有降价，不推送（已记录基准 ${Object.keys(next).length} 张）`);
+    console.log(`✅ 本轮没有降价也没有新上架，不推送（已记录基准 ${Object.keys(next).length} 张）`);
     return;
   }
+  console.log(`本轮：降价 ${hits.length} 张 · 新上架 ${nwHits.length} 张`);
 
-  // 排序：星标优先 → 跌幅大优先
-  hits.sort((a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0) || b.score - a.score || b.at - a.at);
+  // 排序：星标优先 → 跌幅大优先 → 变动时间新的优先
+  const bySort = (a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0) || b.score - a.score || b.at - a.at;
+  hits.sort(bySort);
+  nwHits.sort(bySort);
   const show = hits.slice(0, MAX_LIST);
+  const nwShow = nwHits.slice(0, NEW_MAX);
   // 两组各自成图、各自从 1 编号；卡名先剥掉同组内的公共前缀，剩下的才是能区分的那截
   const showStar = withLabel(show.filter(h => h.stars));
   const showOther = withLabel(show.filter(h => !h.stars));
+  const showNw = withLabel(nwShow);
 
   /* ---- 拼集合图 ---- */
   let sharp = null;
@@ -384,7 +417,8 @@ function postJson(url, body) {
   try { fs.rmSync(imgDir, { recursive: true, force: true }); } catch (e) {}
   const starFile = `star-${stamp}.jpg`;
   const otherFile = `other-${stamp}.jpg`;
-  let starUrl = '', otherUrl = '';
+  const nwFile = `new-${stamp}.jpg`;
+  let starUrl = '', otherUrl = '', nwUrl = '';
   if (sharp) {
     try {
       if (await buildSheet(sharp, showStar, path.join(imgDir, starFile))) {
@@ -396,6 +430,11 @@ function postJson(url, body) {
         otherUrl = await publishImg(otherFile, path.join(imgDir, otherFile));
       }
     } catch (e) { console.log('⚠️ 其他集合图失败：' + e.message); }
+    try {
+      if (await buildSheet(sharp, showNw, path.join(imgDir, nwFile))) {
+        nwUrl = await publishImg(nwFile, path.join(imgDir, nwFile));
+      }
+    } catch (e) { console.log('⚠️ 新上架集合图失败：' + e.message); }
     await pruneImgs();
   }
 
@@ -407,6 +446,8 @@ function postJson(url, body) {
   const cardBlock = (h, i) => {
     const a = [`**${i}**　[${h.label || trimName(h.name)}](${link(h.id)})`];
     for (const r of h.rows) {
+      // 新上架的卡本来没有价，就不写「原来的价→」（from=0）
+      if (!(r.from > 0)) { a.push('', `${r.label} ${r.cny}`); continue; }
       const from = yuan(r.label === '匹配' ? CNY_M(r.from) : CNY_Q(r.from));
       a.push('', `${r.label} ${from}→${r.cny}`);
     }
@@ -419,7 +460,7 @@ function postJson(url, body) {
   const BYTE_CAP = 1500;  // 每条正文的字节预算，留出余量
   const parts = [];
 
-  function packGroup(list, label, img) {
+  function packGroup(list, label, img, trunc) {
     if (!list.length) return;
     const chunks = [];
     let cur = [], lines = 0, bytes = 0;
@@ -437,11 +478,14 @@ function postJson(url, body) {
     if (cur.length) chunks.push(cur);
     chunks.forEach((c, i) => parts.push({
       label, img: i === 0 ? img : '', items: c, part: i + 1, of: chunks.length,
+      trunc: i === chunks.length - 1 ? (trunc || 0) : 0,
     }));
   }
 
-  packGroup(showStar, `⭐ 星标 ${showStar.length} 张`, starUrl);
-  packGroup(showOther, `其他 ${showOther.length} 张`, otherUrl);
+  packGroup(showStar, `⭐ 星标 ${showStar.length} 张`, starUrl, 0);
+  packGroup(showOther, `其他 ${showOther.length} 张`, otherUrl, 0);
+  // 新上架单独一组（还是星标在前、其余在后），有自己的集合图，序号从 1 起
+  packGroup(showNw, `✚ 新上架 ${showNw.length} 张`, nwUrl, nwHits.length - nwShow.length);
 
   // 每条消息：标题 → 看板链接 → 分组名 → 集合图（只第一段带） → 卡片 → 页脚
   const buildMd = p => {
@@ -453,6 +497,7 @@ function postJson(url, body) {
       if (k) L.push('');                          // 卡与卡之间空一行
       L.push(...cardBlock(h, idx));
     });
+    if (p.trunc > 0) L.push('', `> 另有 ${p.trunc} 张新上架没列出，点上面看板 →「新上架」看全部`);
     L.push('', `> 监控 ${data.items.length} 张`);
     return L.join('\n');
   };
@@ -462,7 +507,7 @@ function postJson(url, body) {
   mds.forEach((m, i) => { console.log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
   console.log('──────────────────────────');
   if (DRY) {
-    console.log(`（--dry 模式，未发送）共 ${mds.length} 条 | 集合图：${starUrl || '无'} / ${otherUrl || '无'}`);
+    console.log(`（--dry 模式，未发送）共 ${mds.length} 条 | 集合图：${starUrl || '无'} / ${otherUrl || '无'} / ${nwUrl || '无'}`);
     return;
   }
   if (!WEBHOOK) {
@@ -474,11 +519,12 @@ function postJson(url, body) {
   const saveState = () => fs.writeFileSync(path.join(HERE, 'state.json'), JSON.stringify(state), 'utf8');
 
   const sent = [];
+  const sentCards = [];   // 真的发出去的那几张卡，只有它们能推进基准
   let lastErr = '';
   for (let i = 0; i < mds.length; i++) {
     let text = mds[i];
     if (i === 0 && AT_MOBILES.length) text += '\n\n' + AT_MOBILES.map(m => '@' + m).join(' ');
-    const title = `🃏 卡市 ${hits.length} 张${mds.length > 1 ? ` ${i + 1}/${mds.length}` : ''} · ${nowCn()}`;
+    const title = `🃏 卡市 ${total} 张${mds.length > 1 ? ` ${i + 1}/${mds.length}` : ''} · ${nowCn()}`;
     const payload = { msgtype: 'markdown', markdown: { title, text } };
     if (i === 0 && AT_MOBILES.length) payload.at = { atMobiles: AT_MOBILES, isAtAll: false };
 
@@ -503,6 +549,7 @@ function postJson(url, body) {
     const code = r.json && r.json.errcode;
     if (r.status === 200 && code === 0) {
       sent.push(i + 1);
+      parts[i].items.forEach(({ h }) => sentCards.push(h));
       console.log(`✅ 第 ${i + 1}/${mds.length} 条已推送（试了 ${attempt + 1} 次）`);
     } else {
       lastErr = `第 ${i + 1} 条 HTTP ${r.status} errcode=${code} ${(r.json && r.json.errmsg) || ''}`;
@@ -512,9 +559,10 @@ function postJson(url, body) {
   }
 
   state.lastNotify = {
-    at: new Date().toISOString(), n: hits.length, ids: show.map(h => h.id),
+    at: new Date().toISOString(), n: total, ids: show.concat(nwShow).map(h => h.id),
+    drop: show.length, new: nwShow.length,
     segs: mds.length, sent: sent.length,
-    imgs: [starUrl, otherUrl].filter(Boolean),
+    imgs: [starUrl, otherUrl, nwUrl].filter(Boolean),
     ok: sent.length === mds.length, err: lastErr,
   };
   if (!sent.length) {
@@ -531,10 +579,10 @@ function postJson(url, body) {
     if (hint) console.error('   → ' + hint);
   }
 
-  // 只更新「真的告诉过她」的那些卡，被截断的下轮还会再推一次
+  // 只更新「真的发出去、真的告诉过她」的那些卡；发失败或超上限没列的，下轮还会再推一次
   const next = Object.assign({}, pushed);
   for (const x of data.items) if (!next[x.id]) next[x.id] = [x.p, x.q];
-  for (const h of show) {
+  for (const h of sentCards) {
     const x = data.items.find(i => i.id === h.id);
     if (!x) continue;
     const old = next[h.id] || [0, 0];
