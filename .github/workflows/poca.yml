@@ -1,17 +1,16 @@
 name: Poca 卡市监控
 
-# 每 20 分钟抓一次 장하오 全量卡（约 986 张），夜间不抓
-# 抓取时段：北京时间 8:00 ~ 次日 1:59（= UTC 0-17 点），即北京 2:00-7:59 停
+# 每 10 分钟抓一次 장하오 全量卡（约 987 张），全天不停（含夜间）。
 # GitHub 自带 schedule 很不准（整点最挤，可能推迟几十分钟甚至跳过），
-# 所以主力是 cron-job.org 每 20 分钟 POST 一次 workflow_dispatch，schedule 只当兜底。
-# 夜间保险：workflow 里另有一步按 UTC 小时判断，即使外部定时器在夜间触发也会直接退出。
-# 脚本内部有「距上次成功不足 2 分钟就跳过」的节流：只防重复触发，不会挡掉正常的一轮；
-# 单轮抓取约 3.5 分钟，20 分钟周期下正常不会误拦。
-# 收藏排名：一天只抓一次，安排在北京时间 1:40 那一场（当天最后一次），其余轮次沿用缓存。
+# 所以主力是 cron-job.org 每 10 分钟 POST 一次 workflow_dispatch，schedule 只当兜底。
+# 两条调度会互相撞：脚本内部有「距上次成功不足 2 分钟就跳过」的节流挡住重复触发，
+# 不会挡掉正常的一轮（单轮抓取约 3.5 分钟，10 分钟周期足够）。
+# 收藏排名：一天只抓一次，安排在北京时间 1:30 之后那一场，其余轮次沿用缓存。
 
 on:
   schedule:
-    - cron: '*/20 0-17 * * *'
+    # 全天每 10 分钟一次（UTC），即北京时间同样每 10 分钟一次
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
       skip_wish:
@@ -37,36 +36,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: 夜间保险（北京 2:00-7:59 不抓）
-        id: night
-        run: |
-          # UTC 18-23 点 = 北京时间次日 2:00-7:59
-          H=$(date -u +%H)
-          if [ "$H" -ge 18 ]; then
-            echo "🌙 UTC ${H} 点 = 北京时间 2-7 点，夜间不抓，本轮直接结束"
-            echo "skip=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: 拉取脚本
-        if: steps.night.outputs.skip != '1'
         uses: actions/checkout@v4
 
       - name: 安装 Node
-        if: steps.night.outputs.skip != '1'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       # 钉钉推送要把降价卡拼成集合图，需要 sharp（有预编译二进制，约 10 秒）
       - name: 安装 sharp（拼集合图用）
-        if: steps.night.outputs.skip != '1'
         continue-on-error: true
         run: npm install sharp --no-save --no-audit --no-fund
 
       - name: 取上一次的状态（poca-data 分支）
-        if: steps.night.outputs.skip != '1'
         run: |
           mkdir -p poca
           BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data"
@@ -80,15 +63,15 @@ jobs:
           if [ "$code" != "200" ]; then rm -f poca/stars.json; echo "  stars.json 不存在（还没同步过星标）"; fi
           ls -la poca/
 
-      - name: 判断收藏排名是否要重抓（一天一次，安排在北京 1:40 那一场）
+      - name: 判断收藏排名是否要重抓（一天一次，安排在北京 1:30 之后那一场）
         id: wish
-        if: steps.night.outputs.skip != '1'
         run: |
           # 收藏数变化很慢，每天抓一次就够。
           # 默认沿用缓存；命中以下任一条件才重抓：
           #   ① 没有缓存（首次运行）
-          #   ② 当前是 UTC 17 点 30 分之后 = 北京时间 1:30 之后，即当天最后一场
-          #   ③ 缓存已经超过 24 小时（夜间那场漏了，兜底补上）
+          #   ② 当前是 UTC 17:30 之后 = 北京时间 1:30 之后（当天最后一段），且距上次已超 6 小时
+          #      —— 加 AGE 判断是为了别在同一段的 3 个轮次里连抓 3 次
+          #   ③ 缓存已经超过 24 小时（某一场漏了，兜底补上）
           SKIP="1"
           if [ ! -f poca/wish.json ]; then
             SKIP=""
@@ -96,9 +79,9 @@ jobs:
           else
             AGE=$(node -e "try{const w=require('./poca/wish.json');process.stdout.write(String(Math.floor((Date.now()-new Date(w.at))/3600000)))}catch(e){process.stdout.write('999')}")
             H=$(date -u +%H); M=$(date -u +%M)
-            if [ "$H" = "17" ] && [ "$M" -ge 30 ]; then
+            if [ "$H" = "17" ] && [ "$M" -ge 30 ] && [ "$AGE" -ge 6 ]; then
               SKIP=""
-              echo "→ 当天最后一场（北京时间 1:30 之后），刷新收藏排名"
+              echo "→ 当天最后一段（北京时间 1:30 之后），刷新收藏排名"
             fi
             if [ "$AGE" -ge 24 ]; then
               SKIP=""
@@ -110,7 +93,6 @@ jobs:
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
 
       - name: 抓取 Poca
-        if: steps.night.outputs.skip != '1'
         env:
           POCA_Q: 장하오
           POCA_CONC: '16'
@@ -122,18 +104,17 @@ jobs:
           fi
 
       - name: 确认产物
-        if: steps.night.outputs.skip != '1'
         run: |
           # 被节流跳过时没有新的 data.json，直接结束本轮（不算失败）
           if [ ! -s poca/data.json ]; then
-            echo "⏭ 本轮跳过（距上次成功不足 2 分钟，或夜间免抓），没有新产物"
+            echo "⏭ 本轮跳过（距上次成功不足 2 分钟），没有新产物"
             echo "SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
           node -e "const d=require('./poca/data.json'); console.log('条数',d.items.length,'抓取用时',d.elapsed+'s','更新于',d.at_cn)"
 
       - name: 推送降价到钉钉
-        if: steps.night.outputs.skip != '1' && env.SKIP != '1'
+        if: env.SKIP != '1'
         continue-on-error: true
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
@@ -145,7 +126,7 @@ jobs:
         run: node poca/notify.js
 
       - name: 发布到 poca-data 分支
-        if: steps.night.outputs.skip != '1' && env.SKIP != '1'
+        if: env.SKIP != '1'
         run: |
           mkdir -p /tmp/pub
           cp poca/data.json poca/state.json /tmp/pub/
