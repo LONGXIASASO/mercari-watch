@@ -32,16 +32,29 @@ const WFS = [
 
 async function api(path, opt = {}) {
   const r = await fetch('https://api.github.com/repos/' + REPO + path, { headers: H, ...opt });
-  if (!r.ok) throw new Error(path + ' → HTTP ' + r.status + ' ' + (await r.text()).slice(0, 160));
-  return r.status === 204 ? null : r.json();
+  const txt = await r.text();
+  if (!r.ok) throw new Error(path + ' → HTTP ' + r.status + ' ' + txt.slice(0, 160));
+  // ⚠️ cancel 返回 202、dispatch 返回 204，两者都是空响应体。
+  // 直接 r.json() 会抛 "Unexpected end of JSON input" —— 明明取消成功了，
+  // 却记成出错、exit 1、整轮标红，看着像看门狗自己挂了。
+  if (!txt) return null;
+  try { return JSON.parse(txt); } catch { return null; }
 }
 
-// 快照文件的「数据时间」离现在多少分钟
+// 快照文件的「数据时间」离现在多少分钟；读不出时间字段返回 -1（本轮不判，也不补触发）
 async function snapAge(wf) {
-  const f = await api('/contents/' + wf.snap + '?ref=' + wf.ref + '&t=' + Date.now());
-  const o = JSON.parse(Buffer.from(f.content, 'base64').toString('utf8'));
+  // 用 raw media type 直接拿原文：contents API 的 base64 版对 **超过 1MB** 的文件
+  // 会返回空 content（encoding: none），这里就会 JSON 解析失败。
+  // 卡市 data.json 现在已 480KB+，卡数再涨就会踩线，所以提前换成 raw。
+  const r = await fetch(
+    'https://api.github.com/repos/' + REPO + '/contents/' + wf.snap +
+    '?ref=' + wf.ref + '&t=' + Date.now(),
+    { headers: { ...H, Accept: 'application/vnd.github.raw' } }
+  );
+  if (!r.ok) throw new Error(wf.snap + '@' + wf.ref + ' → HTTP ' + r.status);
+  const o = JSON.parse(await r.text());
   const t = Date.parse(o.at || 0);
-  if (!t) return 99999;
+  if (!t) return -1;
   return Math.round((Date.now() - t) / 60000);
 }
 
@@ -68,7 +81,11 @@ async function snapAge(wf) {
       const active = now.filter(x => x.status !== 'completed');
       const age = await snapAge(wf);
 
-      if (age > STALE_MIN && !active.length) {
+      if (age < 0) {
+        // 读不出时间字段就什么都别做 —— 否则会退化成「每 15 分钟无脑补触发一轮」，
+        // 白白多烧一轮机器时间，还会和正常调度撞车。
+        console.log(wf.name + ' 快照 ' + wf.snap + ' 里读不到 at 时间字段，本轮跳过判断');
+      } else if (age > STALE_MIN && !active.length) {
         await api('/actions/workflows/' + wf.file + '/dispatches', {
           method: 'POST',
           body: JSON.stringify({ ref: 'main' }),
