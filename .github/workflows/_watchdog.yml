@@ -1,0 +1,47 @@
+name: 队列看门狗
+
+# 监控两条抓取流水线是否还活着，出问题自己救。
+#
+# 背景（2026-10-30 真实事故）：GitHub 偶发「任务排队了但一直不分配机器」。
+# 两个抓取工作流都配了 concurrency（同组只允许 1 个在跑 + 1 个排队），
+# 一个卡在 queued 的 run 会永久占死名额 —— 后面的轮次全排队、再往后被取消，
+# 抓取彻底停摆，页面上「最后抓取时间」定格一小时。当时就是这样卡的。
+#
+# 本工作流每 15 分钟检查一次：
+#   ① 排队超过 15 分钟没分到机器的 run → 取消，把名额让出来
+#   ② 数据文件超过 25 分钟没更新、且没有任何在跑/排队的 run → 补触发一轮
+#
+# ⚠️ 分钟数 2/17/32/47 特意和两边的调度错开（煤炉 GitHub 5/15…、外部 8/18…；
+#    卡市 GitHub 4/14…、外部 0/10…），避免同一分钟挤进多个 dispatch。
+
+on:
+  schedule:
+    - cron: '2,17,32,47 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+permissions:
+  actions: write   # 取消 run + 触发 workflow_dispatch 都要
+  contents: read
+
+jobs:
+  dog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: 拉取脚本
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 检查队列与数据新鲜度
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: node _watchdog.js
