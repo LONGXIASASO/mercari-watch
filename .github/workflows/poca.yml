@@ -9,8 +9,10 @@ name: Poca 卡市监控
 
 on:
   schedule:
-    # 全天每 10 分钟一次（UTC），即北京时间同样每 10 分钟一次
-    - cron: '*/10 * * * *'
+    # 全天每 10 分钟一次。分钟数特意用 4/14/24…，与 cron-job.org 外部定时器的
+    # :10 :20 :30… 错开 4~6 分钟 —— 同一分钟进来两个 dispatch 会被 concurrency 排队、
+    # 后到的那次白跑一遍。改这里时务必继续错开。
+    - cron: '4,14,24,34,44,54 * * * *'
   workflow_dispatch:
     inputs:
       skip_wish:
