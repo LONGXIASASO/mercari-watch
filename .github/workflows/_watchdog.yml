@@ -10,6 +10,10 @@ name: 队列看门狗
 # 本工作流每 15 分钟检查一次：
 #   ① 排队超过 15 分钟没分到机器的 run → 取消，把名额让出来
 #   ② 数据文件超过 25 分钟没更新、且没有任何在跑/排队的 run → 补触发一轮
+#   ③ 连续失败 3 轮 / 数据陈旧 60 分钟 → 推钉钉告警；恢复后推一条恢复通知
+#      （2026-11-01 Poca 换 API 域名，抓取静默挂了 8 小时 40 分才被用户发现 ——
+#        ①② 全程都在跑，但抓取逻辑本身坏了，补触发只是白跑。缺的就是这条告警。）
+#      告警去重靠 main 的 watchdog_state.json，只在「进故障」「回正常」各推一次。
 #
 # ⚠️ 分钟数 2/17/32/47 特意和两边的调度错开（煤炉 GitHub 5/15…、外部 8/18…；
 #    卡市 GitHub 4/14…、外部 0/10…），避免同一分钟挤进多个 dispatch。
@@ -24,8 +28,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: write   # 取消 run + 触发 workflow_dispatch 都要
-  contents: read
+  actions: write    # 取消 run + 触发 workflow_dispatch 都要
+  contents: write   # 读快照 + 写告警状态 watchdog_state.json（只在这两种状态下变时才写）
 
 jobs:
   dog:
@@ -44,4 +48,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          # 抓取挂掉时推钉钉告警（与降价通知同一个机器人）
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          ALERT_AT_MOBILES: ${{ secrets.DINGTALK_AT_MOBILES }}
+          ALERT_AFTER: '3'    # 连续失败 3 轮（约 30 分钟）开始告警
+          STALE_ALERT: '60'   # 数据陈旧 60 分钟且无任务在跑 → 判为调度停摆
         run: node _watchdog.js
