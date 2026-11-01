@@ -201,7 +201,9 @@ async function writeState(obj) {
 /* ── 三种消息 ── */
 const msgFail = (wf, cf, age, at) =>
   '### 🚨 ' + wf.name + '抓取连续失败 ' + cf.n + ' 轮\n\n' +
-  '**数据停在**：' + cnTs(at) + '（已' + spanText(age) + '没更新）\n\n' +
+  (at
+    ? '**数据停在**：' + cnTs(at) + '（已' + spanText(age) + '没更新）\n\n'
+    : '**快照文件读不到**：' + wf.snap + ' 可能被删除或改了路径\n\n') +
   '**失败轮次**：' + (cf.nums.length ? cf.nums.join(' ') : '（最新一轮）') + '\n\n' +
   '**看板**：[打开' + wf.name + '](' + wf.link + ')\n\n' +
   '> 常见原因：站方接口变更、反爬拦截、机房 IP 被墙。\n' +
@@ -258,29 +260,41 @@ const msgRecover = (wf, at, sinceTs) =>
       // 清理后重新看一眼，别在有任务要跑的时候又插一轮
       const now = (await api('/actions/workflows/' + wf.file + '/runs?per_page=5')).workflow_runs || [];
       const active = now.filter(x => x.status !== 'completed');
-      const { age, at } = await snapInfo(wf);
+      // 快照信息：读失败（文件被删 / 改了路径 / 权限变更）不该让整段判断作废，
+      // 否则「连败 3 轮」这种最该报的情况反而一个字都推不出去。
+      let age = -1, at = '';
+      try {
+        ({ age, at } = await snapInfo(wf));
+      } catch (e) {
+        console.log(wf.name + ' 读快照 ' + wf.snap + ' 失败：' + e.message);
+      }
       const cf = countConsecFail(runs);
 
-      if (age < 0) {
-        // 读不出时间字段就什么都别做 —— 否则会退化成「每 15 分钟无脑补触发一轮」，
-        // 白白多烧一轮机器时间，还会和正常调度撞车。
-        console.log(wf.name + ' 快照 ' + wf.snap + ' 里读不到 at 时间字段，本轮跳过判断');
+      if (age < 0 && !cf.n) {
+        // 既拿不到时间、也查不到失败记录 → 什么都别做。
+        // 否则会退化成「每 15 分钟无脑补触发一轮」，白烧机器时间还和正常调度撞车。
+        console.log(wf.name + ' 拿不到快照时间、也查不到失败记录，本轮跳过判断');
         continue;
       }
 
-      console.log(wf.name + ' 数据 ' + age + ' 分钟前' +
+      console.log(wf.name + ' 数据 ' + (age < 0 ? '时间未知' : age + ' 分钟前') +
         (active.length ? '，有 ' + active.length + ' 个任务在跑/排队' : '，正常') +
         (cf.n ? '｜连续失败 ' + cf.n + ' 轮' : ''));
 
       // ② 太旧且没人跑 → 补触发一轮
-      let dispatched = false;
+      // ⚠️ 这一步必须单独 try：补触发被 GitHub 拒绝（403 / 限流）时若直接抛出去，
+      //    下面的告警判断会被整段跳过。而「数据陈旧」和「连续失败」往往是同时发生的
+      //    —— 正是最该报警的时刻，绝不能因为自救失败而彻底静默。
       if (age > STALE_MIN && !active.length) {
-        await api('/actions/workflows/' + wf.file + '/dispatches', {
-          method: 'POST',
-          body: JSON.stringify({ ref: 'main' }),
-        });
-        dispatched = true;
-        console.log(wf.name + ' 数据已 ' + age + ' 分钟没更新，补触发一轮');
+        try {
+          await api('/actions/workflows/' + wf.file + '/dispatches', {
+            method: 'POST',
+            body: JSON.stringify({ ref: 'main' }),
+          });
+          console.log(wf.name + ' 数据已 ' + age + ' 分钟没更新，补触发一轮');
+        } catch (e) {
+          console.log(wf.name + ' 数据已 ' + age + ' 分钟没更新，补触发失败：' + e.message);
+        }
       }
 
       // ③ 告警判定
