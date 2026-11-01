@@ -22,6 +22,11 @@ on:
   schedule:
     - cron: '2,17,32,47 * * * *'
   workflow_dispatch:
+    inputs:
+      selftest:
+        description: '只发一条测试告警（验证钉钉通道，不动数据）'
+        type: boolean
+        default: false
 
 concurrency:
   group: watchdog
@@ -54,4 +59,4 @@ jobs:
           ALERT_AT_MOBILES: ${{ secrets.DINGTALK_AT_MOBILES }}
           ALERT_AFTER: '3'    # 连续失败 3 轮（约 30 分钟）开始告警
           STALE_ALERT: '60'   # 数据陈旧 60 分钟且无任务在跑 → 判为调度停摆
-        run: node _watchdog.js
+        run: node _watchdog.js ${{ inputs.selftest && '--selftest' || '' }}
