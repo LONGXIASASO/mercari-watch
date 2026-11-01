@@ -223,6 +223,18 @@ const msgRecover = (wf, at, sinceTs) =>
 
 /* ── 主流程 ── */
 (async () => {
+  // 自检：只发一条明确标注「测试」的消息，验证钉钉通道是否通，不碰任何 run / 数据 / 状态。
+  // 触发方式：workflow_dispatch 时勾上 selftest。
+  if (process.argv.includes('--selftest')) {
+    console.log('自检模式：发一条测试告警');
+    const ok = await ding('【自检】抓取告警通道测试',
+      '### 🔔 告警通道自检\n\n' +
+      '收到这条说明**抓取失败告警能正常发到群里**。\n\n' +
+      '这是手动点的自检消息，**不是真的出故障**，可以忽略。\n\n' +
+      '> 真出事时你会收到「🚨 抓取连续失败 N 轮」和修好后的「✅ 已恢复」。');
+    process.exit(ok ? 0 : 1);
+  }
+
   let fail = 0;
   const state = await readState();
   let stateChanged = false;
