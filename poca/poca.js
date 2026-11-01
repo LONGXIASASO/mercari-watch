@@ -15,7 +15,13 @@ const fs = require('fs');
 const path = require('path');
 
 const HERE = __dirname;
-const HOST = 'api.phocamarket.com';
+// ⚠️ 2026-11-01 站方把 API 域名换了：api.phocamarket.com → api.pocamarket.com（少一个 h）。
+//    旧域名现在所有 /card/v1/* 一律 404（响应体为空、text/plain，是 nginx 直接拒的），
+//    未匹配路径则回落到前端 HTML。同期 phocamarket.com 整站改成「引导下载 App」的落地页，
+//    app.phocamarket.com/<码> 也会 302 去 Google Play。
+//    路径和返回结构完全没变，只换了主机名。
+const HOST = 'api.pocamarket.com';
+
 const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 const Q = process.env.POCA_Q || '장하오';
 // 额外固定监控的卡：不在关键词搜索结果里，也要跟主列表一起抓、一起算涨跌、一起推送。
@@ -44,7 +50,7 @@ function rawGet(p, timeout = 25000) {
       headers: {
         'User-Agent': UA, 'Accept': 'application/json',
         'Accept-Language': 'ko-KR,ko;q=0.9',
-        'POCA-DISPLAY-LANGUAGE': 'ko', 'Referer': 'https://phocamarket.com/',
+        'POCA-DISPLAY-LANGUAGE': 'ko', 'Referer': 'https://pocamarket.com/',
       },
     }, res => {
       let d = '';
