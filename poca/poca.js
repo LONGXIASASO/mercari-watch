@@ -44,6 +44,8 @@ const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 16); // 明细接口单�
 // 所以云端至少留 3 天（含窗口外 1 个基准点），单卡最多 HIST_MAX 个点控制体积。
 const HIST_MAX = 100;
 const HIST_KEEP_DAYS = 3;
+// 永久价格档案：单卡封顶的点数（按当前节奏约 8 次/小时全站摊，500 点足够好几年）
+const ARCH_MAX = 500;
 const TZ = 8 * 3600e3; // 北京时间
 
 const argOf = (n, d) => { const i = process.argv.indexOf('--' + n); return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : d; };
@@ -303,6 +305,24 @@ const KIND_KR2EN = {
   const detail = await fetchDetails(ids);
   console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
 
+  // 永久价格档案 pchg.json（只记 p/q 变化，永不裁剪）
+  // 首次运行时用 state.json 里现成的 hist 当种子，避免从零开始。
+  const pchgPath = path.join(HERE, 'pchg.json');
+  let pchg = {};
+  if (fs.existsSync(pchgPath)) {
+    try {
+      const j = JSON.parse(fs.readFileSync(pchgPath, 'utf8'));
+      if (j && j.d) pchg = j.d;
+    } catch (e) {
+      console.log('pchg.json 读取失败，用 state.hist 当种子：' + e.message);
+    }
+  }
+  if (!Object.keys(pchg).length && prevState.hist) {
+    for (const [id, arr] of Object.entries(prevState.hist)) if (Array.isArray(arr) && arr.length) pchg[id] = arr.slice();
+  }
+  const archSeed = Object.keys(pchg).length;
+  let archAdded = 0;
+
   // 4) 组装
   const prevSnap = prevState.snap || {};
   const hist = prevState.hist || {};
@@ -350,15 +370,26 @@ const KIND_KR2EN = {
       }
     }
 
-    // 价格变动记录（只在变化时追加）
+    // 价格变动记录（只在变化时追加，只留近几天给页面用）
     const cur = [p, q, t];
     let arr = hist[r.id] || [];
     const last = arr[arr.length - 1];
-    if (!last || Number(last[1]) !== cur[0] || Number(last[2]) !== cur[1] || Number(last[3]) !== cur[2]) {
+    const isNewPoint = !last || Number(last[1]) !== cur[0] || Number(last[2]) !== cur[1] || Number(last[3]) !== cur[2];
+    if (isNewPoint) {
       arr.push([stamp, cur[0], cur[1], cur[2]]);
       if (arr.length > HIST_MAX) arr = arr.slice(-HIST_MAX);
       hist[r.id] = arr;
       histAdded++;
+      // 永久档案：同一份点也进 pchg.json，永不裁剪
+      // ⚠️ 页面只显示近 HIST_KEEP_DAYS 天，而 state.json 的 hist 会被裁掉，
+      //    想要长历史就只能单独存档。成交接口下线后，这份价格史是唯一能长期积累的真数据。
+      const arc = pchg[r.id] || (pchg[r.id] = []);
+      const la = arc[arc.length - 1];
+      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1] || Number(la[3]) !== cur[2]) {
+        arc.push([stamp, cur[0], cur[1], cur[2]]);
+        if (arc.length > ARCH_MAX) arc.splice(0, arc.length - ARCH_MAX);
+        archAdded++;
+      }
     }
 
     items.push({
@@ -444,8 +475,16 @@ const KIND_KR2EN = {
   if (prevState.pushed && Object.keys(prevState.pushed).length) nextState.pushed = prevState.pushed;
   fs.writeFileSync(statePath, JSON.stringify(nextState), 'utf8');
 
+  // 永久价格档案（poca-data 分支单独的 pchg.json，不进 state.json，免得越滚越大）
+  fs.writeFileSync(pchgPath, JSON.stringify({ v: 1, at: out.at, at_cn: stamp, d: pchg }), 'utf8');
+
   const kb = f => (fs.statSync(path.join(HERE, f)).size / 1024).toFixed(0);
-  console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB`);
+  console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB · pchg.json ${kb('pchg.json')}KB`);
+  {
+    let pts = 0;
+    for (const k of Object.keys(pchg)) pts += (pchg[k] || []).length;
+    console.log(`   价格档案 ${Object.keys(pchg).length} 张卡 / ${pts} 个点（种子 ${archSeed} 张，本轮新增 ${archAdded} 点，永不裁剪）`);
+  }
   console.log(`   ${items.length} 张 | 有 1:1 ${out.stats.p} | 有速购 ${out.stats.q} | 跌价 ${nDown} | 上新 ${nFresh} | 新增价格记录 ${histAdded} 点`);
   console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张（保底值，最后确认 ${carryAt || '无'}）`);
   {
