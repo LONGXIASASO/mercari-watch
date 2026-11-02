@@ -46,6 +46,94 @@ const HIST_MAX = 100;
 const HIST_KEEP_DAYS = 3;
 // 永久价格档案：单卡封顶的点数（按当前节奏约 8 次/小时全站摊，500 点足够好几年）
 const ARCH_MAX = 500;
+// 详情页每个「记录」区块最多下发多少条（再多就靠区块内滚动看，不下发省体积）
+const REC_MAX = 40;
+
+// 把价格档案里某一列抽成「只在变化时留一条」的记录序列 [[价, 时间], ...]
+// idx=1 是匹配价，idx=2 是速切价
+function seriesOf(arc, idx, max) {
+  const out = [];
+  let prev = null;
+  for (const e of arc || []) {
+    const v = Number(e[idx]) || 0;
+    if (v === prev) continue;      // 没变就不记
+    prev = v;
+    out.push([v, String(e[0])]);
+  }
+  return out.slice(-max);          // 只留最近的 max 条
+}
+
+// ── 历史推算 ────────────────────────────────────────────────────────────
+// 改版后接口不再给「求购 / 成交」，但改版前攒下的卖家挂单(s)和历史成交(m)还在
+// detcarry.json 里。用它们反推改版前的匹配价走势，供详情页「匹配价记录」补前半段。
+//
+// 精度实测 86.1%（拿 524 个真实观测点比对）：反推值 = 截至某日、仍存活挂单里的最低价。
+// 已知偏差：便宜的挂单早被买走、不在 s 里，所以反推值系统性偏高约 10%。
+// 因此历史段一律打 '~' 标记，前端用灰色显示并注明是推算值。
+const WK = 86400000;
+// 该日期所在周的周一（YYYY-MM-DD）
+function isoWeek(dd) {
+  const t = new Date(dd + 'T00:00:00Z');
+  const w = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - w);
+  return t.toISOString().slice(0, 10);
+}
+// 回弹过滤：A → B → A 且首尾相隔 ≤span 天，说明 B 是一日噪声（挂单反复上下架），删掉
+function debounceSeq(arr, span) {
+  const a = arr.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 1; i < a.length - 1; i++) {
+      if (a[i - 1].p === a[i + 1].p) {
+        const gap = (new Date(a[i + 1].day) - new Date(a[i - 1].day)) / WK;
+        if (gap <= span) { a.splice(i, 1); changed = true; break; }
+      }
+    }
+  }
+  return a;
+}
+// 把一堆 [价格, 日期] 聚合成走势：同日取极值 → 按周分桶取极值 → 回弹过滤 → 只在变化时留一条
+// pickMax=false 走最低价（匹配价语义），true 走最高价（求购语义）
+function trimSeries(rows, pickMax) {
+  const byDay = {};
+  for (const e of rows || []) {
+    const p = Number(e[0]) || 0;
+    if (p <= 0) continue;
+    const day = String(e[1]).slice(0, 10);
+    if (!(day in byDay) || (pickMax ? p > byDay[day] : p < byDay[day])) byDay[day] = p;
+  }
+  const pts = Object.keys(byDay).map(day => ({ day, p: byDay[day] }));
+  if (!pts.length) return [];
+  // 按 ISO 周分桶：一周内的多笔只留一个极值，这样既压掉同源噪声，又不会吞掉跨周的真实变动
+  const bucket = {};
+  for (const x of pts) {
+    const k = isoWeek(x.day);
+    if (!(k in bucket) || (pickMax ? x.p > bucket[k].p : x.p < bucket[k].p)) bucket[k] = x;
+  }
+  const arr = debounceSeq(Object.values(bucket).sort((a, b) => a.day.localeCompare(b.day)), 30);
+  const out = [];
+  let prev = null;
+  for (const x of arr) {
+    if (x.p === prev) continue;
+    prev = x.p;
+    out.push([x.p, x.day]);
+  }
+  return out;
+}
+// 卖家挂单 → 反推序列：按上架日排序，最低价被刷新时才是一条新记录
+function ordersToSeries(s) {
+  const rows = (s || []).slice().sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  const out = [];
+  let min = null;
+  for (const e of rows) {
+    const p = Number(e[0]) || 0;
+    if (p <= 0) continue;
+    if (min === null || p < min) { min = p; out.push([p, String(e[1]).slice(0, 10)]); }
+  }
+  return out;
+}
+
 const TZ = 8 * 3600e3; // 北京时间
 
 const argOf = (n, d) => { const i = process.argv.indexOf('--' + n); return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : d; };
@@ -323,6 +411,33 @@ const KIND_KR2EN = {
   const archSeed = Object.keys(pchg).length;
   let archAdded = 0;
 
+  // 历史种子：把改版前后几份本地快照里的「当时报价」并进来，
+  // 这样详情页的匹配/速切价格记录能往前看到 10-23，不用从今天从零开始。
+  // 种子是固定文件，靠时间戳去重，重复跑不会重复插。
+  {
+    const seedP = path.join(HERE, 'pchgseed.json');
+    if (fs.existsSync(seedP)) {
+      try {
+        const sd = JSON.parse(fs.readFileSync(seedP, 'utf8'));
+        let addedSeed = 0;
+        for (const [id, pts] of Object.entries(sd.d || {})) {
+          const arc = pchg[id] || (pchg[id] = []);
+          const has = new Set(arc.map(e => String(e[0])));
+          for (const pt of pts) {
+            if (has.has(String(pt[0]))) continue;
+            arc.push(pt);
+            has.add(String(pt[0]));
+            addedSeed++;
+          }
+          arc.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+        }
+        if (addedSeed) console.log(`历史价格种子并入 ${addedSeed} 个时间点`);
+      } catch (e) {
+        console.log('pchgseed.json 读取失败：' + e.message);
+      }
+    }
+  }
+
   // 4) 组装
   const prevSnap = prevState.snap || {};
   const hist = prevState.hist || {};
@@ -385,7 +500,8 @@ const KIND_KR2EN = {
       //    想要长历史就只能单独存档。成交接口下线后，这份价格史是唯一能长期积累的真数据。
       const arc = pchg[r.id] || (pchg[r.id] = []);
       const la = arc[arc.length - 1];
-      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1] || Number(la[3]) !== cur[2]) {
+      // 只看匹配价/速切价：速切成交(t)现在是保底常数，跟着它比会一直判成「没变化」
+      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1]) {
         arc.push([stamp, cur[0], cur[1], cur[2]]);
         if (arc.length > ARCH_MAX) arc.splice(0, arc.length - ARCH_MAX);
         archAdded++;
@@ -433,23 +549,46 @@ const KIND_KR2EN = {
     }
   }
 
-  // 5) 明细 + 历史合并（同名 det 结构，前端直接用）
-  // 三段挂单明细（卖家挂单 s / 买家求购 b / 历史匹配成交 m）在 11-02 改版后接口不再提供，
-  // 这里用改版前本地快照汇总的 detcarry.json 顶上（886 张卡、成交 3400+ 条，跨度 2023-09 起）。
-  // 接口将来若恢复这几个字段，上面的 detail 会覆盖掉保底值（顺序：先保底、后接口）。
+  // 5) 详情页三段「记录」（前端 secList 直接渲染，格式 [价, 时间, 可选标记]）：
+  //    hs = 匹配价格记录：前半段用改版前的挂单/成交反推（带 '~'），后半段是 10-23 起的真实观测
+  //    hq = 速切价格记录：速切没有历史明细，只有真实观测
+  //    hb = 最高求购记录：接口已不提供，只有 11-01 前攒下的（detcarry 的 b 列），之后定格
+  //    ⚠️ 真实观测一条都不删 —— 每 10 分钟抓一次、亲眼看到的变动全部保留，用户要看完整过程
+  //    h  = 近 2 日涨跌要用的原始序列，别删
   const det = {};
   for (const r of main.list) {
     const rec = {};
     if (r.image) rec.u = String(r.image).replace('https://d1sut5kn3lwnf7.cloudfront.net', '');
+
     const dc = detCarry.d[r.id];
-    if (dc) {
-      if (dc.s && dc.s.length) rec.s = dc.s;
-      if (dc.b && dc.b.length) rec.b = dc.b;
-      if (dc.m && dc.m.length) rec.m = dc.m;
-      rec.da = detCarry.at;                 // 这三段明细的最后确认日期
+    const arc = pchg[r.id] || [];
+    const realS = seriesOf(arc, 1, REC_MAX);     // 匹配价真实观测
+    const realQ = seriesOf(arc, 2, REC_MAX);     // 速切价真实观测
+
+    // 历史推算段只取「第一条真实观测之前」，两段不重叠、不打架
+    let histS = [];
+    if (dc && (dc.m || dc.s)) {
+      histS = trimSeries([...(dc.m || []), ...ordersToSeries(dc.s)], false);
+      if (realS.length) {
+        const firstDay = String(realS[0][1]).slice(0, 10);
+        histS = histS.filter(x => x[1] < firstDay);
+        // 拼接处同价的话压掉历史段尾巴，避免连着两条同价
+        if (histS.length && histS[histS.length - 1][0] === realS[0][0]) histS.pop();
+      }
+      histS = histS.map(x => [x[0], x[1], '~']);
     }
-    const d = detail[r.id];
-    if (d) { if (d.s) rec.s = d.s; if (d.b) rec.b = d.b; if (d.m) rec.m = d.m; }
+    const hs = [...histS, ...realS];
+    if (hs.length) rec.hs = hs.slice(-REC_MAX);
+    if (realQ.length) rec.hq = realQ;
+
+    if (dc) {
+      if (dc.b && dc.b.length) {
+        const hb = trimSeries(dc.b, true);          // 求购看「最高价」
+        if (hb.length) rec.hb = hb.slice(-REC_MAX);
+      }
+      rec.da = detCarry.at;
+    }
+
     const h = hist[r.id];
     if (h && h.length >= 2) rec.h = h;
     if (Object.keys(rec).length) det[r.id] = rec;
@@ -489,7 +628,9 @@ const KIND_KR2EN = {
   console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张（保底值，最后确认 ${carryAt || '无'}）`);
   {
     const dv = Object.values(det);
-    console.log(`   明细：卖家挂单 ${dv.filter(x => x.s).length} 张 | 买家求购 ${dv.filter(x => x.b).length} 张 | 历史成交 ${dv.filter(x => x.m).length} 张（最后确认 ${detCarry.at || '无'}）`);
+    const tot = k => dv.reduce((s, x) => s + ((x[k] || []).length), 0);
+    const est = dv.reduce((s, x) => s + ((x.hs || []).filter(e => e[2] === '~').length), 0);
+    console.log(`   记录：匹配价 ${dv.filter(x => x.hs).length} 张(${tot('hs')} 条，其中推算 ${est} 条) | 速切价 ${dv.filter(x => x.hq).length} 张(${tot('hq')} 条) | 最高求购 ${dv.filter(x => x.hb).length} 张(${tot('hb')} 条，定格 ${detCarry.at || '无'})`);
   }
   console.log(`   耗时 ${out.elapsed}s`);
 })().catch(e => { console.error('❌ 抓取失败：', e.message); process.exit(1); });
