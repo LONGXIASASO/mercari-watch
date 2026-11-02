@@ -229,6 +229,25 @@ const KIND_KR2EN = {
   if (fs.existsSync(statePath)) {
     try { prevState = Object.assign(prevState, JSON.parse(fs.readFileSync(statePath, 'utf8'))); } catch (e) {}
   }
+  // 「求购 / 最近成交 / 速切成交」保底值
+  // ⚠️ 2026-11-02 站方改版后，v3 接口只给「最低卖价」，求购与成交记录端点（旧 /buy、/matching）
+  //    全部下线，全球站 gb/v2/history 是另一个卖家池（同卡价格差 4 倍以上），不能拿来顶替。
+  //    为了不让页面上的「最高求购」「最近匹配成交」两行凭空消失，这里沿用改版前最后一次抓到的
+  //    真值：carry.json 是种子（改版前快照提炼），跑起来后存在 state.json 的 carry 里自我维护。
+  //    沿用来的值会在 items 上打 cf=最后确认日期，前端可据此标注数据新旧。
+  const carryPath = path.join(HERE, 'carry.json');
+  let carry = (prevState.carry && prevState.carry.d) ? prevState.carry : null;
+  if (!carry && fs.existsSync(carryPath)) {
+    try {
+      const seed = JSON.parse(fs.readFileSync(carryPath, 'utf8'));
+      if (seed && seed.d) carry = { at: seed.at || '', d: seed.d };
+    } catch (e) {
+      console.log('carry.json 读取失败，跳过保底：' + e.message);
+    }
+  }
+  if (!carry) carry = { at: '', d: {} };
+  console.log(`保底数据 ${Object.keys(carry.d).length} 条（最后确认 ${carry.at || '无'}）`);
+
   if (MIN_GAP_MIN > 0 && prevState.at) {
     const gap = (Date.now() - new Date(prevState.at).getTime()) / 60000;
     if (gap < MIN_GAP_MIN) {
@@ -270,18 +289,31 @@ const KIND_KR2EN = {
   const liveIds = new Set(ids.map(String));
   const items = [];
   let nDown = 0, nFresh = 0, histAdded = 0;
+  // 保底值的新一轮存档（只留本轮还在榜上的卡）
+  const carryNext = {};
+  let carryAt = carry.at || '';
 
   for (const r of main.list) {
     // ⚠️ 2026-11-02 v3 字段对照（拿旧快照逐张比对过，几乎是 1:1）：
     //    transaction_sell_price → 旧 get_lowest_sell_price   （匹配最低价，404 张有值，完全吻合）
     //    offer_price            → 旧 get_collection_lowest_sell_offer_price（速切最低价，769 张有值，完全吻合）
-    //    求购(wished_sells 全空)、最近成交、速切成交：新版不再提供，统一置 0。
+    //    求购(wished_sells 全空)、最近成交、速切成交：v3 不再提供 → 走 carry 保底，见上方注释。
     const p = num(r.transaction_sell_price);                  // 匹配：最低卖价
     const q = num(r.offer_price);                             // 速切：最低卖价
-    const b = 0;                                              // 最高求购（新版无）
-    const mp = 0;                                             // 最近匹配成交（新版无）
-    const t = 0;                                              // 速切最近成交（新版无）
+    // 实时值：v3 目前恒为 0。将来若站方恢复这几个字段，把对应变量改成读接口即可，
+    // 下面的保底逻辑会自动让位（实时值优先）。
+    const liveB = 0, liveMp = 0, liveT = 0;
+    const hold = carry.d[r.id] || null;
+    const b = liveB || (hold ? num(hold[0]) : 0);              // 最高求购
+    const mp = liveMp || (hold ? num(hold[1]) : 0);            // 最近匹配成交
+    const t = liveT || (hold ? num(hold[2]) : 0);              // 速切最近成交
+    const fromCarry = (b > 0 && !liveB) || (mp > 0 && !liveMp) || (t > 0 && !liveT);
     const stock = r.is_stocked ? 1 : 0;                       // 新版只给布尔「有无在售」
+
+    // 存档：本轮拿到的（实时或沿用）值留作下一轮的保底
+    if (b > 0 || mp > 0 || t > 0) carryNext[r.id] = [b, mp, t];
+    // 真有实时值时，把确认日期推到今天（当前 v3 不会触发，留着以防站方恢复字段）
+    if (liveB > 0 || liveMp > 0 || liveT > 0) carryAt = stamp.slice(0, 10);
 
     const ps = prevSnap[r.id];
     let chg = null;
@@ -321,6 +353,8 @@ const KIND_KR2EN = {
       kind: KIND_KR2EN[r.kind_name] || r.kind_name || '',
       img: IMG(),
       p, q, b, mp, t, stock,
+      // cf：b/mp/t 里若有沿用保底的值，这里是它们最后一次被确认到的日期（YYYY-MM-DD）
+      ...(fromCarry ? { cf: carryAt } : {}),
       rd: regDate(r.image),
       rk: wishRank.get(r.id) || 0,
       chg,
@@ -375,11 +409,14 @@ const KIND_KR2EN = {
   fs.writeFileSync(path.join(HERE, 'data.json'), JSON.stringify(out), 'utf8');
   // ⚠️ pushed 是钉钉推送用的基准价（notify.js 维护），这里必须原样带过去，否则每轮首抓就把它冲掉
   const nextState = { at: out.at, snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])), hist };
+  // 保底值跟着 state.json 走，下一轮接着用（carry.json 只是首次种子，不参与更新）
+  if (Object.keys(carryNext).length) nextState.carry = { at: carryAt, d: carryNext };
   if (prevState.pushed && Object.keys(prevState.pushed).length) nextState.pushed = prevState.pushed;
   fs.writeFileSync(statePath, JSON.stringify(nextState), 'utf8');
 
   const kb = f => (fs.statSync(path.join(HERE, f)).size / 1024).toFixed(0);
   console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB`);
   console.log(`   ${items.length} 张 | 有 1:1 ${out.stats.p} | 有速购 ${out.stats.q} | 跌价 ${nDown} | 上新 ${nFresh} | 新增价格记录 ${histAdded} 点`);
+  console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张（保底值，最后确认 ${carryAt || '无'}）`);
   console.log(`   耗时 ${out.elapsed}s`);
 })().catch(e => { console.error('❌ 抓取失败：', e.message); process.exit(1); });
