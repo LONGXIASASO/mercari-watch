@@ -248,6 +248,26 @@ const KIND_KR2EN = {
   if (!carry) carry = { at: '', d: {} };
   console.log(`保底数据 ${Object.keys(carry.d).length} 条（最后确认 ${carry.at || '无'}）`);
 
+  // 详情弹窗的三段挂单明细（卖家挂单 / 买家求购 / 历史匹配成交）保底
+  // 同样是 11-02 改版后接口不再提供的字段；这份是静态种子，从改版前本地快照汇总而来，
+  // 不需要每轮更新（接口不恢复就不会有新数据），所以只从 carry 文件读、不进 state.json。
+  const detCarryPath = path.join(HERE, 'detcarry.json');
+  let detCarry = { at: '', d: {} };
+  if (fs.existsSync(detCarryPath)) {
+    try {
+      const seed = JSON.parse(fs.readFileSync(detCarryPath, 'utf8'));
+      if (seed && seed.d) detCarry = seed;
+    } catch (e) {
+      console.log('detcarry.json 读取失败，明细保底跳过：' + e.message);
+    }
+  }
+  {
+    const ids2 = Object.keys(detCarry.d);
+    let nm2 = 0;
+    for (const k of ids2) if (detCarry.d[k].m && detCarry.d[k].m.length) nm2++;
+    console.log(`明细保底 ${ids2.length} 张卡（有成交 ${nm2} 张，最后确认 ${detCarry.at || '无'}）`);
+  }
+
   if (MIN_GAP_MIN > 0 && prevState.at) {
     const gap = (Date.now() - new Date(prevState.at).getTime()) / 60000;
     if (gap < MIN_GAP_MIN) {
@@ -383,10 +403,20 @@ const KIND_KR2EN = {
   }
 
   // 5) 明细 + 历史合并（同名 det 结构，前端直接用）
+  // 三段挂单明细（卖家挂单 s / 买家求购 b / 历史匹配成交 m）在 11-02 改版后接口不再提供，
+  // 这里用改版前本地快照汇总的 detcarry.json 顶上（886 张卡、成交 3400+ 条，跨度 2023-09 起）。
+  // 接口将来若恢复这几个字段，上面的 detail 会覆盖掉保底值（顺序：先保底、后接口）。
   const det = {};
   for (const r of main.list) {
     const rec = {};
     if (r.image) rec.u = String(r.image).replace('https://d1sut5kn3lwnf7.cloudfront.net', '');
+    const dc = detCarry.d[r.id];
+    if (dc) {
+      if (dc.s && dc.s.length) rec.s = dc.s;
+      if (dc.b && dc.b.length) rec.b = dc.b;
+      if (dc.m && dc.m.length) rec.m = dc.m;
+      rec.da = detCarry.at;                 // 这三段明细的最后确认日期
+    }
     const d = detail[r.id];
     if (d) { if (d.s) rec.s = d.s; if (d.b) rec.b = d.b; if (d.m) rec.m = d.m; }
     const h = hist[r.id];
@@ -418,5 +448,9 @@ const KIND_KR2EN = {
   console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB`);
   console.log(`   ${items.length} 张 | 有 1:1 ${out.stats.p} | 有速购 ${out.stats.q} | 跌价 ${nDown} | 上新 ${nFresh} | 新增价格记录 ${histAdded} 点`);
   console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张（保底值，最后确认 ${carryAt || '无'}）`);
+  {
+    const dv = Object.values(det);
+    console.log(`   明细：卖家挂单 ${dv.filter(x => x.s).length} 张 | 买家求购 ${dv.filter(x => x.b).length} 张 | 历史成交 ${dv.filter(x => x.m).length} 张（最后确认 ${detCarry.at || '无'}）`);
+  }
   console.log(`   耗时 ${out.elapsed}s`);
 })().catch(e => { console.error('❌ 抓取失败：', e.message); process.exit(1); });
