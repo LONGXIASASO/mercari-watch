@@ -55,7 +55,7 @@ jobs:
         run: |
           mkdir -p poca
           BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data"
-          for f in state.json wish.json; do
+          for f in state.json wish.json pchg.json; do
             code=$(curl -sSL -o "poca/$f" -w '%{http_code}' "$BASE/$f" || true)
             if [ "$code" != "200" ]; then rm -f "poca/$f"; echo "  $f 不存在（首次运行）"; fi
           done
@@ -133,6 +133,8 @@ jobs:
           mkdir -p /tmp/pub
           cp poca/data.json poca/state.json /tmp/pub/
           [ -f poca/wish.json ] && cp poca/wish.json /tmp/pub/
+          # 永久价格档案：单独文件，越滚越大，不能塞进 state.json
+          if [ -f poca/pchg.json ]; then cp poca/pchg.json /tmp/pub/; fi
           cd /tmp/pub
           git init -q -b poca-data
           git config user.name "poca-watch-bot"
