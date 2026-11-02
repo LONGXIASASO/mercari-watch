@@ -25,10 +25,19 @@ const HOST = 'api.pocamarket.com';
 const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 const Q = process.env.POCA_Q || '장하오';
 // 额外固定监控的卡：不在关键词搜索结果里，也要跟主列表一起抓、一起算涨跌、一起推送。
-// 短链 app.phocamarket.com/xxxxxxx 用移动端 UA 请求一次就能解出卡 id（Location 里的 /findphoca/<id>）。
 // 436791 = RICKY · NEVER SAY NEVER 메이크스타（2026-01-12 特典）
-const PIN_IDS = String(process.env.POCA_PIN || '436791')
-  .split(',').map(s => s.trim()).filter(Boolean);
+// ⚠️ 2026-11-02 改版后 v3 没有任何单卡接口（/card/v3/<id> 等全部 404），
+//    只能「用卡名+成员当关键词再搜一遍，按 id 命中」。所以支持 `id:搜索词` 写法：
+//    POCA_PIN="436791:MAKESTAR 리키"  →  主搜索没有就单独搜这个词
+const PINS = String(process.env.POCA_PIN || '436791:MAKESTAR 리키')
+  .split(',').map(s => s.trim()).filter(Boolean)
+  .map(s => {
+    const i = s.indexOf(':');
+    return i > 0
+      ? { id: s.slice(0, i).trim(), q: s.slice(i + 1).trim() }
+      : { id: s, q: '' };
+  });
+const PIN_IDS = PINS.map(p => p.id);
 const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发超过 8 会被限速，16 实测反而慢一倍
 const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 16); // 明细接口单条很轻，16 并发没问题
 // 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
@@ -85,36 +94,47 @@ const stamp = (() => {
   return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + 'T' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
 })();
 
-// ── 全量搜索分页 ──
-async function fetchAll(sort) {
-  const sq = sort ? '&sort=' + sort : '';
-  const first = await getJson(`/card/v1/search?q=${encodeURIComponent(Q)}&page=1${sq}`);
-  if (!first || !first.results) throw new Error('首页抓取失败，接口可能变更');
-  const count = first.count;
-  const pages = Math.min(Math.ceil(count / 8), 300);
-  const buf = new Array(pages + 1);
-  buf[1] = first;
-  let next = 2, failed = 0, done = 1;
-  async function worker() {
-    for (;;) {
-      const p = next++;
-      if (p > pages) return;
-      const j = await getJson(`/card/v1/search?q=${encodeURIComponent(Q)}&page=${p}${sq}`);
-      if (j && j.results) buf[p] = j; else failed++;
-      if (++done % 40 === 0) console.log(`  搜索${sort ? '(' + sort + ')' : ''} ${done}/${pages} 失败 ${failed}`);
-    }
-  }
-  await Promise.all(Array.from({ length: CONC }, worker));
-  if (failed > pages * 0.15) throw new Error(`搜索失败页 ${failed}/${pages}，超过 15%，放弃本次`);
+// ── 全量搜索分页（v3 游标式） ──
+// ⚠️ v3 没有 count、没有 sort、也没有 page=数字；分页只认 page=<上一页返回的 next_page>，
+//    传别的参数名一律 400 VALIDATION_ERROR（服务端有参数白名单）。
+//    每页固定 16 条，1019 条约 64 页，串行约 45 秒；游标必须严格串行，不能并发。
+async function fetchAll() {
   const all = [];
-  for (let p = 1; p <= pages; p++) if (buf[p] && buf[p].results) all.push(...buf[p].results);
-  const map = new Map();
-  for (const r of all) map.set(r.id, r);
-  return { count, list: [...map.values()], failed };
+  const seen = new Set();
+  let cursor = null, page = 0, failed = 0;
+  while (page < 200) {
+    const qs = cursor ? '&page=' + encodeURIComponent(cursor) : '';
+    const j = await getJson(`/card/v3/search?q=${encodeURIComponent(Q)}${qs}`);
+    if (!j || !Array.isArray(j.results)) {
+      if (page === 0) throw new Error('首页抓取失败，接口可能变更');
+      if (++failed > 3) throw new Error(`搜索翻页连续失败 ${failed} 次，放弃本次`);
+      continue;
+    }
+    page++;
+    let added = 0;
+    for (const x of j.results) {
+      if (x && x.id && !seen.has(x.id)) { seen.add(x.id); all.push(x); added++; }
+    }
+    if (page % 16 === 0) console.log(`  搜索第 ${page} 页，累计 ${all.length} 条`);
+    // next_page 为空 / 本页全是重复 → 到底了
+    if (!j.next_page || !j.results.length || added === 0) break;
+    cursor = j.next_page;
+  }
+  return { count: all.length, list: all, pages: page, failed };
 }
 
 // ── 每卡挂单明细 ──
+// ⚠️ 2026-11-02 改版后，旧的 /card/v1/<id>/sell|buy|matching 三个端点全部下线，
+//    v3 也没有对应的明细端点（/card/v3/<id>、/sell、/buy、/matching 均 404）。
+//    新站的挂单明细只在网页端详情接口里（/apis/card/gb/v2/<id> 的 seller_shop），
+//    但那是 Vercel 反爬域名、且字段结构与旧版不同，暂不接入。
+//    这里保留函数壳，返回空对象：det[id] 仍有图片(u)和价格历史(h)，只是少了 s/b/m 分布。
 async function fetchDetails(ids) {
+  return {};
+}
+
+// 旧实现（留档，等站方恢复或找到新端点在接回来）
+async function fetchDetailsLegacy(ids) {
   const out = {};
   let next = 0, fails = 0, done = 0;
   const rows = o => (o && Array.isArray(o.results))
@@ -146,20 +166,59 @@ async function fetchDetails(ids) {
 }
 
 // ── 固定监控卡补抓（接口字段与搜索结果同结构，可直接混进 main.list） ──
+// 用关键词翻页找指定 id（v3 没单卡接口，只能这么捞）
+async function searchOneById(q, id, maxPages = 10) {
+  let cursor = null, page = 0;
+  while (page < maxPages) {
+    const qs = cursor ? '&page=' + encodeURIComponent(cursor) : '';
+    const j = await getJson(`/card/v3/search?q=${encodeURIComponent(q)}${qs}`);
+    if (!j || !Array.isArray(j.results)) return null;
+    page++;
+    const hit = j.results.find(x => x && String(x.id) === String(id));
+    if (hit) return hit;
+    if (!j.next_page || !j.results.length) return null;
+    cursor = j.next_page;
+  }
+  return null;
+}
+
+// ── 固定监控卡补抓 ──
+// v3 没有单卡接口，先看主搜索有没有，没有就用配置的搜索词再单独捞一遍。
 async function fetchPinned(list) {
-  if (!PIN_IDS.length) return [];
+  if (!PINS.length) return [];
   const have = new Set(list.map(r => String(r.id)));
   const out = [];
-  for (const id of PIN_IDS) {
-    if (have.has(String(id))) continue;      // 搜索里已经带了就不重复加
-    const c = await getJson(`/card/v1/${id}`);
-    if (c && c.id) out.push(c);
-    else console.log(`  ⚠️ 固定卡 ${id} 拉取失败，本轮先跳过`);
+  for (const pin of PINS) {
+    if (have.has(String(pin.id))) continue;      // 搜索里已经带了就不重复加
+    let c = null;
+    if (pin.q) c = await searchOneById(pin.q, pin.id);
+    if (c) {
+      out.push(c);
+      console.log(`  固定卡 ${pin.id} 已用「${pin.q}」搜到`);
+    } else {
+      console.log(`  ⚠️ 固定卡 ${pin.id} 拉取失败（没配搜索词或搜不到），本轮先跳过`);
+    }
   }
   return out;
 }
 
 const IMG = () => 'L';
+
+// v3 的 kind 是韩文（kind_name），前端 KIND 表用英文键，这里做一次转换。
+// 映射按 kind_id 顺序实测确认：1 앨범 / 2 시즌그리팅 / 3 팬싸 / 4 팬미팅 / 5 팬클럽
+//                                6 콘서트 / 7 MD / 8 콜라보 / 9 특전 / 10 기타
+const KIND_KR2EN = {
+  '앨범': 'Album',
+  '시즌그리팅': "Season's greeting",
+  '팬싸': 'Fan sign',
+  '팬미팅': 'Fan meeting',
+  '팬클럽': 'Fan club',
+  '콘서트': 'Concert',
+  'MD': 'MD',
+  '콜라보': 'Collabo',
+  '특전': 'Benefit',
+  '기타': 'ETC',
+};
 
 (async () => {
   const t0 = Date.now();
@@ -180,9 +239,9 @@ const IMG = () => 'L';
 
   console.log(`[${stamp}] 开始抓取 "${Q}"，并发 ${CONC}`);
 
-  // 1) 搜索（默认序 = 实时交易顺）
-  const main = await fetchAll('');
-  console.log(`搜索完成 ${main.list.length}/${main.count} 条，${Math.round((Date.now() - t0) / 1000)}s`);
+  // 1) 搜索全量（v3 游标）
+  const main = await fetchAll();
+  console.log(`搜索完成 ${main.list.length} 条（${main.pages} 页，失败 ${main.failed}），${Math.round((Date.now() - t0) / 1000)}s`);
 
   // 1.5) 固定监控卡（例如短链分享过来的别的成员的卡）：搜索抓不到就单独补，混进同一份列表
   const pinned = await fetchPinned(main.list);
@@ -191,25 +250,13 @@ const IMG = () => 'L';
     console.log(`固定监控卡补入 ${pinned.length} 张：${pinned.map(x => x.id).join(', ')}，合计 ${main.list.length} 张`);
   }
 
-  // 2) 收藏排名（变化慢，6 小时内直接用缓存，省一半抓取时间）
+  // 2) 收藏排名：v3 的结果里直接带 wish_count，按它降序就是收藏榜，
+  //    不用像旧版那样再按 sort=wish 抓一遍全量（v3 的 sort 参数会 400）。
   let wishRank = new Map();
-  const wishCachePath = path.join(HERE, 'wish.json');
-  let wishAge = 1e9;
-  if (fs.existsSync(wishCachePath)) {
-    try {
-      const c = JSON.parse(fs.readFileSync(wishCachePath, 'utf8'));
-      wishRank = new Map(c.rank || []);
-      wishAge = (Date.now() - new Date(c.at).getTime()) / 60000;
-    } catch (e) {}
-  }
-  if (!SKIP_WISH && wishAge > 360) {
-    const w = await fetchAll('wish');
-    wishRank = new Map();
-    (w.list || []).forEach((r, i) => wishRank.set(r.id, i + 1));
-    fs.writeFileSync(wishCachePath, JSON.stringify({ at: new Date().toISOString(), rank: [...wishRank] }), 'utf8');
-    console.log(`收藏排名完成 ${wishRank.size} 条，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
-  } else {
-    console.log(`收藏排名沿用缓存（${Math.round(wishAge)} 分钟前，${wishRank.size} 条）`);
+  {
+    const sorted = [...main.list].sort((a, b) => num(b.wish_count) - num(a.wish_count));
+    sorted.forEach((r, i) => wishRank.set(r.id, i + 1));
+    console.log(`收藏排名完成 ${wishRank.size} 条（按 wish_count 自算）`);
   }
 
   // 3) 明细
@@ -225,12 +272,16 @@ const IMG = () => 'L';
   let nDown = 0, nFresh = 0, histAdded = 0;
 
   for (const r of main.list) {
-    const p = num(r.get_lowest_sell_price);                  // 匹配：1:1 卖单最低价（= /sell 端点最低）
-    const q = num(r.get_collection_lowest_sell_offer_price);  // 速切：빠른구매 寄售库存最低价
-    const b = num(r.get_highest_buy_price);                   // 最高求购：구매 희망가（= /buy 端点最高）
-    const mp = num(r.get_matching_price);                     // 最近匹配成交：최근 매칭가（= /matching 端点最新一条）
-    const t = num(r.get_collection_transaction_price);         // 速切最近成交：컬렉션 거래가
-    const stock = num(r.get_collection_count);
+    // ⚠️ 2026-11-02 v3 字段对照（拿旧快照逐张比对过，几乎是 1:1）：
+    //    transaction_sell_price → 旧 get_lowest_sell_price   （匹配最低价，404 张有值，完全吻合）
+    //    offer_price            → 旧 get_collection_lowest_sell_offer_price（速切最低价，769 张有值，完全吻合）
+    //    求购(wished_sells 全空)、最近成交、速切成交：新版不再提供，统一置 0。
+    const p = num(r.transaction_sell_price);                  // 匹配：最低卖价
+    const q = num(r.offer_price);                             // 速切：最低卖价
+    const b = 0;                                              // 最高求购（新版无）
+    const mp = 0;                                             // 最近匹配成交（新版无）
+    const t = 0;                                              // 速切最近成交（新版无）
+    const stock = r.is_stocked ? 1 : 0;                       // 新版只给布尔「有无在售」
 
     const ps = prevSnap[r.id];
     let chg = null;
@@ -260,13 +311,14 @@ const IMG = () => 'L';
 
     items.push({
       id: r.id,
-      n: r.name_en || r.name || '',
+      // v3 只给韩文原名（name），没有 name_en；前端 n 为空时会回退到 nk，不影响显示
+      n: r.name || '',
       nk: r.name || '',
-      g: (r.group && (r.group.name_en || r.group.name)) || '',
-      gk: (r.group && r.group.name) || '',
-      m: (r.member && (r.member.name_en || r.member.name)) || '',
-      mk: (r.member && r.member.name) || '',
-      kind: (r.kind && (r.kind.name_en || r.kind.name)) || '',
+      g: r.group_name || '',
+      gk: r.group_name || '',
+      m: r.member_name || '',
+      mk: r.member_name || '',
+      kind: KIND_KR2EN[r.kind_name] || r.kind_name || '',
       img: IMG(),
       p, q, b, mp, t, stock,
       rd: regDate(r.image),
