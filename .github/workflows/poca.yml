@@ -25,6 +25,11 @@ on:
         required: false
         default: ''
         type: string
+      bootstrap:
+        description: '⚠️ 仅在 poca-data 分支真的空掉时填 1：允许从零建档案（会覆盖旧档案）'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: poca-watch
@@ -55,14 +60,43 @@ jobs:
         run: |
           mkdir -p poca
           BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data"
-          for f in state.json wish.json pchg.json; do
-            code=$(curl -sSL -o "poca/$f" -w '%{http_code}' "$BASE/$f" || true)
-            if [ "$code" != "200" ]; then rm -f "poca/$f"; echo "  $f 不存在（首次运行）"; fi
-          done
+          # ⚠️⚠️ 2026-11-06 17:40 事故复盘：这里原来是一次性 curl，失败就 rm 掉当「首次运行」，
+          #    接着脚本从零播种，再把这份短档案 force push 覆盖上去 ——
+          #    3304 个价格点被 1028 个冲掉，11-02～11-06 的所有价格变动永久丢失。
+          #    现在：每个文件最多试 6 次；state.json / pchg.json 全试失败就整轮中止，
+          #    绝不拿空档案去覆盖线上。真要从零建，手动 dispatch 时把 bootstrap 填 1。
+          fetch() {
+            local f="$1" url="$2" i code
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -sSL --max-time 30 --retry 2 --retry-delay 1 -o "poca/$f" -w '%{http_code}' "$url" || true)
+              if [ "$code" = "200" ] && [ -s "poca/$f" ]; then
+                echo "  ✅ $f 第 $i 次拿到，$(stat -c%s "poca/$f") 字节"
+                return 0
+              fi
+              echo "  ⚠️ $f 第 $i 次取不到（HTTP ${code:-timeout}），3 秒后重试"
+              sleep 3
+            done
+            rm -f "poca/$f"
+            return 1
+          }
+          HARD_FAIL=""
+          fetch state.json "$BASE/state.json" || HARD_FAIL="$HARD_FAIL state.json"
+          fetch pchg.json  "$BASE/pchg.json"  || HARD_FAIL="$HARD_FAIL pchg.json"
+          fetch wish.json  "$BASE/wish.json"  || echo "  wish.json 没有，本轮重抓收藏排名"
           # 星标清单存在 main 分支（poca/stars.json，由页面写入）。不能放 poca-data：
           # 那是每轮 force push 的单 commit 分支，会把它冲掉。
-          code=$(curl -sSL -o poca/stars.json -w '%{http_code}' "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/poca/stars.json" || true)
-          if [ "$code" != "200" ]; then rm -f poca/stars.json; echo "  stars.json 不存在（还没同步过星标）"; fi
+          fetch stars.json "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/poca/stars.json" \
+            || echo "  stars.json 没有（还没同步过星标）"
+
+          if [ -n "$HARD_FAIL" ]; then
+            if [ "${{ github.event.inputs.bootstrap }}" = "1" ]; then
+              echo "::warning::state/pchg 取不到（$HARD_FAIL），但 bootstrap=1，允许从零建档案"
+              rm -f poca/state.json poca/pchg.json
+            else
+              echo "::error::poca-data 上的$HARD_FAIL 重试 6 次仍取不到 —— 本轮中止，绝不用空档案覆盖线上。确需从零建，请手动触发并填 bootstrap=1"
+              exit 1
+            fi
+          fi
           ls -la poca/
 
       - name: 判断收藏排名是否要重抓（一天一次，安排在北京 1:30 之后那一场）
