@@ -151,6 +151,30 @@ jobs:
           if [ "${{ github.event.inputs.skip_wish }}" = "true" ]; then SKIP="1"; echo "→ 手动指定跳过收藏排名"; fi
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
 
+      # ⚠️ 2026-11-11 连续 4 轮「首页抓取失败」全是第一个请求 0.5 秒内就挂（404 立即返回，不等重试）。
+      #    本地同一份代码、同一套 header 拿 200，怀疑是 Actions 机房出口 IP 被站方挡。
+      #    这段自检把「出口 IP / curl / node 三条路的状态码」一次性打进日志，
+      #    下次再挂能一眼区分「接口真变了」还是「IP 被墙」。
+      - name: 出口网络自检（区分「站方接口变更」和「机房 IP 被挡」）
+        run: |
+          UA='Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+          echo "===== 出口 IP ====="
+          curl -sS -m 15 https://api.ipify.org || true; echo
+          echo "===== DNS ====="
+          getent hosts phocamarket.com || true
+          echo "===== 主站首页（HTML）====="
+          curl -sS -m 25 -o /tmp/home.html -w "HTTP %{http_code} size=%{size_download} ip=%{remote_ip} t=%{time_total}\n" https://phocamarket.com/ || true
+          echo "===== 搜索接口（curl）====="
+          curl -sS -m 25 -o /tmp/s.json -w "HTTP %{http_code} size=%{size_download}\n" \
+            -H "Accept: application/json" -H "User-Agent: $UA" \
+            -H "Accept-Language: ko-KR,ko;q=0.9" -H "POCA-DISPLAY-LANGUAGE: ko" \
+            -H "Referer: https://pocamarket.com/" \
+            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
+          echo "----- body 前 200 字 -----"
+          head -c 200 /tmp/s.json || true; echo
+          echo "===== 搜索接口（node https，与 poca.js 完全同款）====="
+          node -e "const h=require('https');const r=h.request({host:'phocamarket.com',path:'/card/v3/search?q='+encodeURIComponent('장하오'),headers:{'User-Agent':'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36','Accept':'application/json','Accept-Language':'ko-KR,ko;q=0.9','POCA-DISPLAY-LANGUAGE':'ko','Referer':'https://pocamarket.com/'},timeout:25000},res=>{let d='';res.setEncoding('utf8');res.on('data',c=>d+=c);res.on('end',()=>console.log('node HTTP',res.statusCode,'len',d.length,'|',d.slice(0,80).replace(/\s+/g,' ')))});r.on('error',e=>console.log('node ERROR',e.code||e.message));r.on('timeout',()=>{r.destroy();console.log('node TIMEOUT')});r.end()"
+
       - name: 抓取 Poca
         env:
           POCA_Q: 장하오
