@@ -44,7 +44,10 @@ const PINS = String(process.env.POCA_PIN || '436791:MAKESTAR 리키')
   });
 const PIN_IDS = PINS.map(p => p.id);
 const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发超过 8 会被限速，16 实测反而慢一倍
-const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 16); // 明细接口单条很轻，16 并发没问题
+// ⚠️ 2026-11-11：明细改成「按需」两阶段（先详情定 p，再只对有挂单/有成交的卡发明细），
+//    阶段 2 每卡最多 2 个并发请求，worker=10 → 等效 20 并发。
+//    站点有 IP 级限速：本地 15 分钟内 ~4000 请求就被整站 404 拉黑，别调大。
+const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 10);
 // 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
 // 所以云端至少留 3 天（含窗口外 1 个基准点），单卡最多 HIST_MAX 个点控制体积。
 const HIST_MAX = 100;
@@ -244,10 +247,29 @@ async function fetchAll() {
 //
 // ⚠️ /card/v1/<id>/sell 的 count 不能当库存：抽 60 张在售卡，34 张返回 0（那是「匹配挂单」池，不是速切库存），
 //    且历史挂单 >5 条的卡现在一律只回 5 条（服务端硬截断）。库存只认 get_collection_count。
+// 明细行：[价格, 完整时间]（保留到秒，前端 md() 会显示成「11-09 22:24」）
+// 每次最多只回 5 条（服务端硬截断，next 恒为 null），所以 max 给 20 只是个上限保险。
+const rowsOf = (o, max) => (o && Array.isArray(o.results))
+  ? o.results
+      .map(x => [Number(x.price) || 0, String(x.create_date || '').slice(0, 19)])
+      .filter(x => x[0] > 0)
+      .slice(0, max)
+  : [];
+
+// ── 单卡详情 + 按需明细（2026-11-11 减重版） ──
+// 实测分组命中率（120 张样本，验证「能不能按库存跳过明细」）：
+//   stock=0 的卡 → 42% 仍有挂单、48% 仍有成交  ⇒ **不能按速切库存跳过**（两个池子不同）
+//   匹配最低卖价 p=0 → 有挂单 0/57 = **0%**     ⇒ p 是挂单明细的**完美判据**，跳过零损失
+//   p=0 但仍有成交的 46%                        ⇒ 成交明细不能用 p 判
+//   stock=0 且 p=0 且 b=0（最冷）→ 挂单/成交/求购 全 0
+// 所以分两阶段：先拿详情（p/st/b 都在这），再按需发明细请求，省掉约 19% 的请求。
 async function fetchDetails(ids) {
   const out = {};
+  const pOf = {};                     // id → 匹配最低卖价，仅用于决定抓不抓明细，不落盘
   let next = 0, fails = 0, done = 0;
-  async function worker() {
+
+  // 阶段 1：单卡详情（1 请求/卡，并发回到 16）
+  async function w1() {
     for (;;) {
       const i = next++;
       if (i >= ids.length) return;
@@ -266,12 +288,46 @@ async function fetchDetails(ids) {
         const st = j.get_collection_count;
         if (st !== null && st !== undefined && isFinite(Number(st))) rec.st = Math.max(0, Number(st));
         if (Object.keys(rec).length) out[id] = rec;
+        pOf[id] = num(j.get_lowest_sell_price);
       }
       if (++done % 250 === 0) console.log(`  单卡详情 ${done}/${ids.length} 失败 ${fails}`);
     }
   }
-  await Promise.all(Array.from({ length: CONC_DETAIL }, worker));
+  await Promise.all(Array.from({ length: 16 }, w1));
   if (fails > ids.length * 0.3) throw new Error(`单卡详情失败 ${fails}/${ids.length}，放弃本次`);
+
+  // 阶段 2：按需抓明细
+  //   挂单 sell   → 只在 p>0 时抓（没人挂单时必定空，实测 0% 命中）
+  //   成交 matching → 只在「p>0 或 有库存 或 有人求购」时抓（三者全 0 的冷门卡实测无成交）
+  const jobs = [];
+  for (const id of Object.keys(out)) {
+    const r = out[id];
+    const p = pOf[id] || 0;
+    const wantSell = p > 0;
+    const wantMatch = p > 0 || (r.st || 0) > 0 || (r.b || 0) > 0;
+    if (wantSell || wantMatch) jobs.push({ id, wantSell, wantMatch });
+  }
+  let jn = 0, jdone = 0, jfails = 0;
+  async function w2() {
+    for (;;) {
+      const i = jn++;
+      if (i >= jobs.length) return;
+      const { id, wantSell, wantMatch } = jobs[i];
+      const [sel, mat] = await Promise.all([
+        wantSell ? getJson(`/card/v1/${id}/sell`) : null,
+        wantMatch ? getJson(`/card/v1/${id}/matching`) : null,
+      ]);
+      if (wantSell && sel === null && wantMatch && mat === null) jfails++;
+      const ds = rowsOf(sel, 20), dm = rowsOf(mat, 20);
+      // 只取有价的，空数组不落盘
+      if (ds.length) out[id].ds = ds;
+      if (dm.length) out[id].dm = dm;
+      if (++jdone % 250 === 0) console.log(`  明细 ${jdone}/${jobs.length} 失败 ${jfails}`);
+    }
+  }
+  await Promise.all(Array.from({ length: CONC_DETAIL }, w2));
+  const nSell = jobs.filter(j => j.wantSell).length, nMat = jobs.filter(j => j.wantMatch).length;
+  console.log(`  按需明细：挂单 ${nSell} 张 / 成交 ${nMat} 张（跳过 ${ids.length - nSell} 张挂单、${ids.length - nMat} 张成交），失败 ${jfails}`);
   return out;
 }
 
@@ -658,6 +714,14 @@ const KIND_KR2EN = {
       if (realB.length) rec.hbLive = 1;             // 有实测段 → 前端副标题改写「实时」
     }
     if (dc) rec.da = detCarry.at;
+
+    // 明细两块（2026-11-11 接回）：ds = 卖家匹配挂单（当前在挂），dm = 匹配成交明细（已成交）
+    // 都是「当前快照」，不是历史累积 —— 每轮整体覆盖，站方撤单/新挂会即时反映。
+    const dv = detail[r.id];
+    if (dv) {
+      if (dv.ds && dv.ds.length) rec.ds = dv.ds;
+      if (dv.dm && dv.dm.length) rec.dm = dv.dm;
+    }
 
     const h = hist[r.id];
     if (h && h.length >= 2) rec.h = h;
