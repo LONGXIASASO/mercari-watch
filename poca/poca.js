@@ -11,6 +11,7 @@
  *    加载失败再退 wsrv 代理（新卡首次没有本地图，只能走代理）。
  */
 const https = require('https');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -231,7 +232,39 @@ const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function rawGet(p, timeout = 25000) {
+// ── 传输层（2026-11-11 事故后改成可切换）──
+// 🚨 事故现场：#2277~#2282 连续 6 轮「首页抓取失败」，每轮第一个请求 0.6 秒内就挂。
+//    GitHub Actions 自检把真相打出来了 —— 同一台 runner、同一个出口 IP（40.65.61.42）、
+//    同一套 header：
+//      curl   → HTTP 200，7657 字节，正常 JSON
+//      node   → HTTP 404，39 字节，{"success":false,"message":"NOT_FOUND"}
+//    也就是说站方那边不止一套后端/链路，node 的请求特征被分到了没有 v3 路由的那套。
+//    不是接口变更、不是 IP 被墙、不是限速 —— 单靠「改 HOST」永远修不好。
+//    所以：node 为主，连续拿不到就整体降级到 curl（curl 在 Actions 上实测稳 200）。
+let TRANSPORT = process.env.POCA_HTTP === 'curl' ? 'curl' : 'node';
+
+const CURL_ARGS = p => [
+  '-sS', '-m', '25', '--connect-timeout', '15',
+  '-H', 'User-Agent: ' + UA,
+  '-H', 'Accept: application/json',
+  '-H', 'Accept-Language: ko-KR,ko;q=0.9',
+  '-H', 'POCA-DISPLAY-LANGUAGE: ko',
+  '-H', 'Referer: https://pocamarket.com/',
+  '-w', '\n__CODE__%{http_code}',
+  'https://' + HOST + p,
+];
+function rawGetCurl(p) {
+  return new Promise(resolve => {
+    execFile('curl', CURL_ARGS(p), { maxBuffer: 24 * 1024 * 1024, timeout: 30000 }, (err, stdout) => {
+      if (err) return resolve({ s: err.code === 28 ? -1 : 0, d: '' });
+      const s = String(stdout || '');
+      const i = s.lastIndexOf('\n__CODE__');
+      if (i < 0) return resolve({ s: 0, d: '' });
+      resolve({ s: Number(s.slice(i + 9)) || 0, d: s.slice(0, i) });
+    });
+  });
+}
+function rawGetNode(p, timeout = 25000) {
   return new Promise(resolve => {
     const req = https.request({
       host: HOST, path: p, method: 'GET', timeout,
@@ -251,16 +284,24 @@ function rawGet(p, timeout = 25000) {
     req.end();
   });
 }
+function rawGet(p, timeout = 25000) {
+  return TRANSPORT === 'curl' ? rawGetCurl(p) : rawGetNode(p, timeout);
+}
 async function getJson(p, tries = 4) {
   const seen = [];
   for (let i = 0; i < tries; i++) {
     const r = await rawGet(p);
-    seen.push(r.s + '/' + (r.d || '').length + (r.d && r.d.length < 12 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
+    seen.push(r.s + '/' + (r.d || '').length + (r.d && r.d.length < 60 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
     if (r.s === 200 && r.d && r.d.trim().startsWith('{')) { try { return JSON.parse(r.d); } catch (e) {} }
-    // ⚠️ 404 不再默默吞掉：站方限速时整站返回 404 空体/1 字节，和「接口真的没了」长得一样，
-    //    以前直接 return null 导致日志只说「接口可能变更」，白查半天。这里记下每次尝试的状态码和体长。
-    if (r.s === 404) { global.LASTGET = p.split('?')[0] + ' → ' + seen.join(','); return null; }
+    // ⚠️ 404 也重试：站方多套后端轮询，404 只说明「这次命中的那套没有这条路由」，
+    //    以前直接 return null 等于一次 404 就整轮报废 —— 这正是连挂 6 轮的最后一环。
     await sleep(400 * (i + 1));
+  }
+  // node 全部失败 → 整体切 curl 再试一轮（见上面的传输层注释）
+  if (TRANSPORT === 'node') {
+    TRANSPORT = 'curl';
+    console.log('  ⚠️ node 连续 ' + tries + ' 次拿不到 ' + p.split('?')[0] + '（' + seen.join(',') + '），传输层降级为 curl 重试');
+    return getJson(p, tries);
   }
   global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
   return null;
