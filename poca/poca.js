@@ -15,12 +15,17 @@ const fs = require('fs');
 const path = require('path');
 
 const HERE = __dirname;
-// ⚠️ 2026-11-01 站方把 API 域名换了：api.phocamarket.com → api.pocamarket.com（少一个 h）。
-//    旧域名现在所有 /card/v1/* 一律 404（响应体为空、text/plain，是 nginx 直接拒的），
-//    未匹配路径则回落到前端 HTML。同期 phocamarket.com 整站改成「引导下载 App」的落地页，
-//    app.phocamarket.com/<码> 也会 302 去 Google Play。
-//    路径和返回结构完全没变，只换了主机名。
-const HOST = 'api.pocamarket.com';
+// ⚠️ 2026-11-11 站方又把韩国站接口挪回主站了：api.pocamarket.com → phocamarket.com
+//    （2026-11-01 曾从 api.phocamarket.com 迁到 api.pocamarket.com，现在两个 api.* 全废）
+//    实测 2026-11-11 10:55：
+//      旧 api.phocamarket.com/card/*   → 404 空体（nginx 直接拒）
+//      旧 api.pocamarket.com/card/v3/* → 404 1 字节（catch-all）
+//      新 phocamarket.com/card/v3/search          → 200，字段与 11-02 版完全一致
+//      新 phocamarket.com/card/v1/<id>/sell|buy|matching → 200（这三条 11-02 后"消失"的明细接口回来了）
+//    只有 api.pocamarket.com/card/gb/v2/* 还是活的，但那是全球站：同一批卡、美元重新定价，
+//    有 ~$5.6 价格地板，KRW/USD 比值散在 89~649，不能顶替韩元，别用。
+//    主站无需鉴权，连发 20 次搜索 + 并发 12 明细全 200，无限速。
+const HOST = 'phocamarket.com';
 
 const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 const Q = process.env.POCA_Q || '장하오';
@@ -214,11 +219,11 @@ async function fetchAll() {
 }
 
 // ── 每卡挂单明细 ──
-// ⚠️ 2026-11-02 改版后，旧的 /card/v1/<id>/sell|buy|matching 三个端点全部下线，
-//    v3 也没有对应的明细端点（/card/v3/<id>、/sell、/buy、/matching 均 404）。
-//    新站的挂单明细只在网页端详情接口里（/apis/card/gb/v2/<id> 的 seller_shop），
-//    但那是 Vercel 反爬域名、且字段结构与旧版不同，暂不接入。
-//    这里保留函数壳，返回空对象：det[id] 仍有图片(u)和价格历史(h)，只是少了 s/b/m 分布。
+// 2026-11-11：/card/v1/<id>/sell|buy|matching 三个端点在新主机 phocamarket.com 上**已恢复**
+//   （返回 {count, results:[{id, create_date, price}]}，与 fetchDetailsLegacy 的 rows() 完全对得上）。
+//   但现在前端只渲染 hs/hq/hb + h，没有「挂单/求购分布」的展示位，抓了也是白抓（每轮多 3000 次请求）。
+//   → 先保留空壳；要接回来的话：让 fetchDetails 直接 return fetchDetailsLegacy(ids)，
+//     再把 detail[id].s/b 接进下方 det 构建和前端详情页（hb 也可以改用它算实时最高求购）。
 async function fetchDetails(ids) {
   return {};
 }
