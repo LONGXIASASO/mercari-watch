@@ -48,7 +48,10 @@ const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发
 // ⚠️ 2026-11-11：明细改成「按需」两阶段（先详情定 p，再只对有挂单/有成交的卡发明细），
 //    阶段 2 每卡最多 2 个并发请求，worker=10 → 等效 20 并发。
 //    站点有 IP 级限速：本地 15 分钟内 ~4000 请求就被整站 404 拉黑，别调大。
-const CONC_DETAIL = Number(process.env.POCA_CONC_DET || 10);
+// ⚠️ curl 传输每个请求都要 spawn 一个进程，实测 1.3s/批，node 只要 0.4s/批 ——
+//    2026-11-11 降级到 curl 后整轮从 100s 涨到 334s。所以 curl 模式默认把并发提到 16 压回时间。
+//    （TRANSPORT 在下面才定义，这里必须用函数，调用时已经初始化好了）
+const CONC_DETAIL = () => Number(process.env.POCA_CONC_DET || (TRANSPORT === 'curl' ? 16 : 10));
 // 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
 // 所以云端至少留 3 天（含窗口外 1 个基准点），单卡最多 HIST_MAX 个点控制体积。
 const HIST_MAX = 100;
@@ -439,7 +442,7 @@ async function fetchDetails(ids) {
       if (++jdone % 250 === 0) console.log(`  明细 ${jdone}/${jobs.length} 失败 ${jfails}`);
     }
   }
-  await Promise.all(Array.from({ length: CONC_DETAIL }, w2));
+  await Promise.all(Array.from({ length: CONC_DETAIL() }, w2));
   const nSell = jobs.filter(j => j.wantSell).length, nMat = jobs.filter(j => j.wantMatch).length;
   console.log(`  按需明细：挂单 ${nSell} 张 / 成交 ${nMat} 张（跳过 ${ids.length - nSell} 张挂单、${ids.length - nMat} 张成交），失败 ${jfails}`);
   return out;
@@ -472,7 +475,7 @@ async function fetchDetailsLegacy(ids) {
       if (++done % 200 === 0) console.log(`  明细 ${done}/${ids.length} 失败 ${fails}`);
     }
   }
-  await Promise.all(Array.from({ length: CONC_DETAIL }, worker));
+  await Promise.all(Array.from({ length: CONC_DETAIL() }, worker));
   if (fails > ids.length * 0.3) throw new Error(`明细失败 ${fails}/${ids.length}，放弃本次`);
   return out;
 }
