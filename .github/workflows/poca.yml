@@ -163,9 +163,9 @@ jobs:
           echo "===== DNS ====="
           getent hosts phocamarket.com || true
           echo "===== 主站首页（HTML）====="
-          curl -sS -m 25 -o /tmp/home.html -w "HTTP %{http_code} size=%{size_download} ip=%{remote_ip} t=%{time_total}\n" https://phocamarket.com/ || true
+          curl -sS -m 25 -o /tmp/home.html -w "HTTP %{http_code} size=%{size_download} http=%{http_version} ip=%{remote_ip} t=%{time_total}\n" https://phocamarket.com/ || true
           echo "===== 搜索接口（curl）====="
-          curl -sS -m 25 -o /tmp/s.json -w "HTTP %{http_code} size=%{size_download}\n" \
+          curl -sS -m 25 -o /tmp/s.json -w "HTTP %{http_code} size=%{size_download} http=%{http_version}\n" \
             -H "Accept: application/json" -H "User-Agent: $UA" \
             -H "Accept-Language: ko-KR,ko;q=0.9" -H "POCA-DISPLAY-LANGUAGE: ko" \
             -H "Referer: https://pocamarket.com/" \
@@ -174,6 +174,13 @@ jobs:
           head -c 200 /tmp/s.json || true; echo
           echo "===== 搜索接口（node https，与 poca.js 完全同款）====="
           node -e "const h=require('https');const r=h.request({host:'phocamarket.com',path:'/card/v3/search?q='+encodeURIComponent('장하오'),headers:{'User-Agent':'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36','Accept':'application/json','Accept-Language':'ko-KR,ko;q=0.9','POCA-DISPLAY-LANGUAGE':'ko','Referer':'https://pocamarket.com/'},timeout:25000},res=>{let d='';res.setEncoding('utf8');res.on('data',c=>d+=c);res.on('end',()=>console.log('node HTTP',res.statusCode,'len',d.length,'|',d.slice(0,80).replace(/\s+/g,' ')))});r.on('error',e=>console.log('node ERROR',e.code||e.message));r.on('timeout',()=>{r.destroy();console.log('node TIMEOUT')});r.end()"
+
+      # 传输层矩阵：查「同一 URL 为什么 curl 200 / node 404」，能不能把 node 修好换回快传输。
+      # 本地测出来一条线索：node 只发 Host 一个头时会拿到 404/1 字节（站方按头拦），
+      # 但 runner 上 node 是全套头却拿 404/39 NOT_FOUND —— 所以要在 runner 上再筛一次。
+      - name: 传输层诊断矩阵
+        continue-on-error: true
+        run: node poca/_diag2.js
 
       - name: 抓取 Poca
         env:
