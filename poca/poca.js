@@ -11,6 +11,7 @@
  *    加载失败再退 wsrv 代理（新卡首次没有本地图，只能走代理）。
  */
 const https = require('https');
+const http2 = require('http2');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -48,10 +49,12 @@ const CONC = Number(process.env.POCA_CONC || 8);       // ⚠️ 搜索页并发
 // ⚠️ 2026-11-11：明细改成「按需」两阶段（先详情定 p，再只对有挂单/有成交的卡发明细），
 //    阶段 2 每卡最多 2 个并发请求，worker=10 → 等效 20 并发。
 //    站点有 IP 级限速：本地 15 分钟内 ~4000 请求就被整站 404 拉黑，别调大。
-// ⚠️ curl 传输每个请求都要 spawn 一个进程，实测 1.3s/批，node 只要 0.4s/批 ——
-//    2026-11-11 降级到 curl 后整轮从 100s 涨到 334s。所以 curl 模式默认把并发提到 16 压回时间。
+// ⚠️ 并发按传输层给：h2 单连接多路复用最省，但**并发太高会被站方按速率限**（返回 404 空体），
+//    本地实测 20 并发跑到第 800 个请求就开始 404/1，降到 12 稳。http1 每请求新建连接用 10，
+//    curl 每请求 spawn 一个进程用 16（实测 1.3s/批，不提并发整轮要 334s）。
 //    （TRANSPORT 在下面才定义，这里必须用函数，调用时已经初始化好了）
-const CONC_DETAIL = () => Number(process.env.POCA_CONC_DET || (TRANSPORT === 'curl' ? 16 : 10));
+const CONC_DETAIL = () => Number(process.env.POCA_CONC_DET
+  || (TRANSPORT === 'h2' ? 12 : TRANSPORT === 'curl' ? 16 : 10));
 // 价格变动记录（hist）保留策略：前端「近2日涨价/降价」按自然日回溯 2 天，
 // 所以云端至少留 3 天（含窗口外 1 个基准点），单卡最多 HIST_MAX 个点控制体积。
 const HIST_MAX = 100;
@@ -235,16 +238,59 @@ const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── 传输层（2026-11-11 事故后改成可切换）──
+// ── 传输层（2026-11-11 事故后改成可切换，三档：h2 → http1 → curl）──
 // 🚨 事故现场：#2277~#2282 连续 6 轮「首页抓取失败」，每轮第一个请求 0.6 秒内就挂。
-//    GitHub Actions 自检把真相打出来了 —— 同一台 runner、同一个出口 IP（40.65.61.42）、
-//    同一套 header：
-//      curl   → HTTP 200，7657 字节，正常 JSON
-//      node   → HTTP 404，39 字节，{"success":false,"message":"NOT_FOUND"}
-//    也就是说站方那边不止一套后端/链路，node 的请求特征被分到了没有 v3 路由的那套。
-//    不是接口变更、不是 IP 被墙、不是限速 —— 单靠「改 HOST」永远修不好。
-//    所以：node 为主，连续拿不到就整体降级到 curl（curl 在 Actions 上实测稳 200）。
-let TRANSPORT = process.env.POCA_HTTP === 'curl' ? 'curl' : 'node';
+//    根因（Actions 上跑的传输层矩阵，脚本见 poca/_diag2.js）：同一台 runner、同一个出口 IP、
+//    同一套 header 打同一个 URL ——
+//      curl（实测 HTTP/2）                        → 200，7642 字节 ✅
+//      node http1 默认 / family4 / Connection:close / 最小 header / 固定两个后端 IP
+//                                                 → 全是 404/39 {"success":false,"message":"NOT_FOUND"}
+//      node http2（ALPN h2）                       → 200，7348 字节 ✅
+//    ⇒ 站方 nginx 把 HTTP/1.1 的请求转给了没有 /card/v3 路由的旧后端，HTTP/2 才走对。
+//    不是接口变更、不是 IP 被墙、不是限速 —— 改 HOST 永远修不好。
+//    所以主传输换成 **http2**（顺带白赚多路复用：不用每请求新建连接，比原来的 http1 还快），
+//    拿不到就降级 http1，再不行降级 curl。POCA_HTTP=h2|http1|curl 可强制。
+let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP) ? process.env.POCA_HTTP : 'h2';
+let H2_RECONNECT = 0;
+let RATE_BACKOFF = 0;   // 疑似「被限速」的退避次数，成功一次就清零
+
+// ── HTTP/2 ──
+// 单连接多路复用；一条 session 上开太多并发流会被服务端 RST（ENHANCE_YOUR_CALM），
+// 并发仍由 CONC / CONC_DETAIL 控制，这里只管「断了自动重连」。
+let H2 = null;
+function h2Session() {
+  if (H2 && !H2.destroyed && !H2.closed) return H2;
+  const s = http2.connect('https://' + HOST);
+  s.on('error', () => {});
+  s.on('goaway', () => { try { s.close(); } catch (e) {} if (H2 === s) H2 = null; });
+  s.on('close', () => { if (H2 === s) H2 = null; });
+  s.unref(); // 别让 http2 session 吊住进程
+  H2 = s;
+  return s;
+}
+function rawGetH2(p, timeout = 25000) {
+  return new Promise(resolve => {
+    let done = false, rq = null;
+    const fin = o => { if (done) return; done = true; clearTimeout(timer); resolve(o); };
+    const timer = setTimeout(() => { try { rq && rq.close(); } catch (e) {} fin({ s: -1, d: '' }); }, timeout);
+    try {
+      rq = h2Session().request({
+        ':method': 'GET', ':path': p,
+        'user-agent': UA, accept: 'application/json',
+        'accept-language': 'ko-KR,ko;q=0.9',
+        'poca-display-language': 'ko',
+        referer: 'https://pocamarket.com/',
+      });
+    } catch (e) { return fin({ s: 0, d: '' }); }
+    let st = 0, d = '';
+    rq.on('response', h => { st = h[':status'] || 0; });
+    rq.setEncoding('utf8');
+    rq.on('data', c => { d += c; if (d.length > 4e6) { try { rq.close(); } catch (e) {} } });
+    rq.on('end', () => fin({ s: st, d }));
+    rq.on('error', () => fin({ s: 0, d: '' }));
+    rq.end();
+  });
+}
 
 const CURL_ARGS = p => [
   '-sS', '-m', '25', '--connect-timeout', '15',
@@ -288,22 +334,48 @@ function rawGetNode(p, timeout = 25000) {
   });
 }
 function rawGet(p, timeout = 25000) {
-  return TRANSPORT === 'curl' ? rawGetCurl(p) : rawGetNode(p, timeout);
+  if (TRANSPORT === 'h2') return rawGetH2(p, timeout);
+  if (TRANSPORT === 'curl') return rawGetCurl(p);
+  return rawGetNode(p, timeout);
 }
 async function getJson(p, tries = 4) {
   const seen = [];
   for (let i = 0; i < tries; i++) {
     const r = await rawGet(p);
     seen.push(r.s + '/' + (r.d || '').length + (r.d && r.d.length < 60 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
-    if (r.s === 200 && r.d && r.d.trim().startsWith('{')) { try { return JSON.parse(r.d); } catch (e) {} }
+    if (r.s === 200 && r.d && r.d.trim().startsWith('{')) { try { const j = JSON.parse(r.d); RATE_BACKOFF = 0; return j; } catch (e) {} }
     // ⚠️ 404 也重试：站方多套后端轮询，404 只说明「这次命中的那套没有这条路由」，
     //    以前直接 return null 等于一次 404 就整轮报废 —— 这正是连挂 6 轮的最后一环。
     await sleep(400 * (i + 1));
   }
-  // node 全部失败 → 整体切 curl 再试一轮（见上面的传输层注释）
-  if (TRANSPORT === 'node') {
+  // 全部失败 → 先分清是「被限速」还是「链路不对」，两者处置完全不同：
+  //   404 空体 / 1~2 字节  = IP 被按速率限了（本地实测 20 并发跑到第 800 个请求就这样），
+  //                          换传输层没用，只能退避等待，等完还是原来那条路；
+  //   404 39 字节 NOT_FOUND = 命中了没有该路由的后端（h2 下不该出现），才需要降传输层。
+  const why = p.split('?')[0] + '（' + seen.join(',') + '）';
+  const slim = seen.map(x => x.split('[')[0]);
+  const rateLimited = slim.every(x => x === '404/0' || x === '404/1' || x === '404/2' || x === '429/0');
+  if (rateLimited && RATE_BACKOFF < 3) {
+    RATE_BACKOFF++;
+    const wait = 1500 * Math.pow(2, RATE_BACKOFF - 1); // 1.5s → 3s → 6s
+    console.log('  ⏳ 疑似站方限速（' + slim[0] + ' 空体），等 ' + wait + 'ms 再试：' + p.split('?')[0]);
+    await sleep(wait);
+    return getJson(p, tries);
+  }
+  if (TRANSPORT === 'h2' && H2_RECONNECT < 2) {
+    H2_RECONNECT++;
+    H2 = null;
+    console.log('  ⚠️ h2 连续 ' + tries + ' 次拿不到 ' + why + '，重建连接后重试（第 ' + H2_RECONNECT + ' 次）');
+    return getJson(p, tries);
+  }
+  if (TRANSPORT === 'h2') {
+    TRANSPORT = 'http1';
+    console.log('  ⚠️ h2 重建后仍失败 ' + why + '，传输层降级为 http1 重试');
+    return getJson(p, tries);
+  }
+  if (TRANSPORT === 'http1') {
     TRANSPORT = 'curl';
-    console.log('  ⚠️ node 连续 ' + tries + ' 次拿不到 ' + p.split('?')[0] + '（' + seen.join(',') + '），传输层降级为 curl 重试');
+    console.log('  ⚠️ http1 连续 ' + tries + ' 次拿不到 ' + why + '，传输层降级为 curl 重试');
     return getJson(p, tries);
   }
   global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
