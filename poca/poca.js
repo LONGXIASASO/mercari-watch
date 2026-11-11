@@ -57,6 +57,74 @@ const ARCH_MAX = 500;
 // 详情页每个「记录」区块最多下发多少条（再多就靠区块内滚动看，不下发省体积）
 const REC_MAX = 40;
 
+// ── 明细永久档案 darc.json（2026-11-11 新增）──
+// 站方的 /card/v1/<id>/sell|matching 每次只回最新 5 条（服务端硬截断，next 恒为 null），
+// 光靠当轮快照，一有新挂单/新成交就把更早的挤掉了。所以每轮把拿到的行并进一份只增不减的档案，
+// 越过 5 条上限把历史攒起来（和价格档案 pchg.json 同一套思路）。
+// 去重键 = 价格 + 完整时间戳（同价同秒不可能并存两条）。
+// 上限 80 条/卡/类：实际单卡很少能攒到，主要是防极端热门卡把档案撑爆。
+const DARC_MAX = 80;
+// 前端每个明细区块最多下发多少条
+const REC_D_MAX = 60;
+
+// 把本轮抓到的明细行并进档案（只增不减），返回新增条数
+// ⚠️ 日期必须归一化成同一种格式再存：接口给的是 "2026-11-03T06:41:12"，
+//    而老档案（detcarry）只到日 "2026-11-03"。两种混着放，字符串排序会把
+//    "11-03 09:30:00"（空格）排到 "11-03T06:41"（T）前面，顺序就乱了。
+//    统一成 T 分隔；只到日的保持原样（它就是只知道日）。
+const normDate = d => String(d || '').trim().replace(' ', 'T');
+
+// 展示前去重：老档案只到日、接口到秒，同一天同一价格会并存两条
+// （"11-03" 和 "11-03T06:41:12" 其实是同一笔挂单）。以精确记录为准，把只到日的那条挡掉。
+// 只影响下发，darc.json 里两个原样都留着。
+function dedupeCoarse(rows) {
+  const exact = new Set();
+  for (const e of rows) {
+    const d = String(e[1]);
+    if (d.length > 10) exact.add(`${e[0]}|${d.slice(0, 10)}`);
+  }
+  if (!exact.size) return rows;
+  return rows.filter(e => {
+    const d = String(e[1]);
+    return d.length > 10 || !exact.has(`${e[0]}|${d.slice(0, 10)}`);
+  });
+}
+
+// 截断时优先保住「当前在挂」的（第三位 1）：挂了很久没人买的单，create_date 可能很早，
+// 攒满 60 条后按时间从尾部截会把这条正主挤掉，用户就看不到「现在还有人挂 ₩X」了。
+function capKeepNow(rows, max) {
+  if (rows.length <= max) return rows;
+  const isNow = e => e[2] === 1;
+  const nowRows = rows.filter(isNow);
+  const rest = rows.filter(e => !isNow(e));
+  const keep = new Set(nowRows);
+  for (const e of rest.slice(-Math.max(0, max - nowRows.length))) keep.add(e);
+  return rows.filter(e => keep.has(e));       // 保持原时间顺序
+}
+
+function mergeDarc(map, id, key, rows) {
+  if (!rows || !rows.length) return 0;
+  const rec = map[id] || (map[id] = {});
+  const arr = rec[key] || (rec[key] = []);
+  const has = new Set(arr.map(e => `${e[0]}|${e[1]}`));
+  let n = 0;
+  for (const r of rows) {
+    const price = Number(r[0]) || 0;
+    const date = normDate(r[1]);
+    if (!(price > 0) || !date) continue;
+    const k = `${price}|${date}`;
+    if (has.has(k)) continue;
+    arr.push([price, date]);
+    has.add(k);
+    n++;
+  }
+  if (n) {
+    arr.sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+    if (arr.length > DARC_MAX) arr.splice(0, arr.length - DARC_MAX);
+  }
+  return n;
+}
+
 // 把价格档案里某一列抽成「只在变化时留一条」的记录序列 [[价, 时间], ...]
 // idx=1 是匹配价，idx=2 是速切价
 function seriesOf(arc, idx, max) {
@@ -501,6 +569,39 @@ const KIND_KR2EN = {
   const detail = await fetchDetails(ids);
   console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
 
+  // 明细永久档案 darc.json：站方每轮只给最新 5 条，这里把历轮拿到的挂单/成交行攒起来。
+  // 只增不减：读上一轮档案 → 并入本轮新行 → 原样写回，任何情况下都不清空已有记录。
+  const darcPath = path.join(HERE, 'darc.json');
+  let darc = {};
+  if (fs.existsSync(darcPath)) {
+    try {
+      const j = JSON.parse(fs.readFileSync(darcPath, 'utf8'));
+      if (j && j.d) darc = j.d;
+    } catch (e) {
+      console.log('darc.json 读取失败（本轮只能从当轮 5 条起算）：' + e.message);
+    }
+  }
+  const darcSeedS = Object.values(darc).reduce((s, v) => s + ((v.s || []).length), 0);
+  const darcSeedM = Object.values(darc).reduce((s, v) => s + ((v.m || []).length), 0);
+  let darcAddS = 0, darcAddM = 0;
+  for (const [id, v] of Object.entries(detail)) {
+    if (v.ds && v.ds.length) darcAddS += mergeDarc(darc, id, 's', v.ds);
+    if (v.dm && v.dm.length) darcAddM += mergeDarc(darc, id, 'm', v.dm);
+  }
+
+  // 首次建档案时，把 11-01 改版前攒在 detcarry.json 里的历史明细并进来当底子
+  // （挂单 867 条 / 成交 3431 条，只有日期没有时分，日期格式与接口一致，靠价格+日期去重）。
+  // ⚠️ 只在「档案还是空的」时候做：老档案只到日，若每轮都并，会跟接口的精确到秒的记录
+  //    重复成两条（同价同日不同键）。
+  let darcSeeded = 0;
+  if (!darcSeedS && !darcSeedM && detCarry && detCarry.d) {
+    for (const [id, v] of Object.entries(detCarry.d)) {
+      if (v && v.s && v.s.length) darcSeeded += mergeDarc(darc, id, 's', v.s);
+      if (v && v.m && v.m.length) darcSeeded += mergeDarc(darc, id, 'm', v.m);
+    }
+    if (darcSeeded) console.log(`明细档案首次建立，并入 11-01 前的历史明细 ${darcSeeded} 条`);
+  }
+
   // 永久价格档案 pchg.json（只记 p/q 变化，永不裁剪）
   // 首次运行时用 state.json 里现成的 hist 当种子，避免从零开始。
   const pchgPath = path.join(HERE, 'pchg.json');
@@ -715,12 +816,24 @@ const KIND_KR2EN = {
     }
     if (dc) rec.da = detCarry.at;
 
-    // 明细两块（2026-11-11 接回）：ds = 卖家匹配挂单（当前在挂），dm = 匹配成交明细（已成交）
-    // 都是「当前快照」，不是历史累积 —— 每轮整体覆盖，站方撤单/新挂会即时反映。
-    const dv = detail[r.id];
-    if (dv) {
-      if (dv.ds && dv.ds.length) rec.ds = dv.ds;
-      if (dv.dm && dv.dm.length) rec.dm = dv.dm;
+    // 明细两块（2026-11-11 接回）：ds = 卖家匹配挂单，dm = 匹配成交明细
+    // 2026-11-11 12:xx 起改成「累积档案」：站方每轮只回最新 5 条，光看当轮会把更早的挤掉，
+    // 所以下发的是 darc.json 里攒下的全量。挂单必须区分「本轮还在挂」和「往轮记录过的」——
+    // 第三位 1 = 本轮接口仍返回（当前在挂），没有第三位 = 往轮攒的（可能已撤单或被新单挤出前 5）。
+    // 成交是既成事实，不存在撤回，不用标记。
+    const dvNow = detail[r.id];
+    const nowSet = new Set((dvNow && dvNow.ds ? dvNow.ds : []).map(e => `${e[0]}|${e[1]}`));
+    const arcD = darc[r.id];
+    if (arcD && arcD.s && arcD.s.length) {
+      const rows = arcD.s.map(e => nowSet.has(`${e[0]}|${e[1]}`) ? [e[0], e[1], 1] : [e[0], e[1]]);
+      rec.ds = capKeepNow(dedupeCoarse(rows), REC_D_MAX);
+    } else if (dvNow && dvNow.ds && dvNow.ds.length) {
+      rec.ds = dvNow.ds;
+    }
+    if (arcD && arcD.m && arcD.m.length) {
+      rec.dm = dedupeCoarse(arcD.m).slice(-REC_D_MAX);
+    } else if (dvNow && dvNow.dm && dvNow.dm.length) {
+      rec.dm = dvNow.dm;
     }
 
     const h = hist[r.id];
@@ -751,8 +864,15 @@ const KIND_KR2EN = {
   // 永久价格档案（poca-data 分支单独的 pchg.json，不进 state.json，免得越滚越大）
   fs.writeFileSync(pchgPath, JSON.stringify({ v: 1, at: out.at, at_cn: stamp, d: pchg }), 'utf8');
 
+  // 永久明细档案（同上：单独文件，只增不减，越过站方「最多 5 条」的上限把历史攒起来）
+  fs.writeFileSync(darcPath, JSON.stringify({ v: 1, at: out.at, at_cn: stamp, d: darc }), 'utf8');
+
   const kb = f => (fs.statSync(path.join(HERE, f)).size / 1024).toFixed(0);
-  console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB · pchg.json ${kb('pchg.json')}KB`);
+  console.log(`✅ data.json ${kb('data.json')}KB · state.json ${kb('state.json')}KB · pchg.json ${kb('pchg.json')}KB · darc.json ${kb('darc.json')}KB`);
+  {
+    const totD = k => Object.values(darc).reduce((s, v) => s + ((v[k] || []).length), 0);
+    console.log(`   明细档案 ${Object.keys(darc).length} 张卡 / 挂单 ${totD('s')} 条（本轮 +${darcAddS}，原 ${darcSeedS + darcSeeded}） / 成交 ${totD('m')} 条（本轮 +${darcAddM}，原 ${darcSeedM + darcSeeded}），永不裁剪`);
+  }
   {
     let pts = 0;
     for (const k of Object.keys(pchg)) pts += (pchg[k] || []).length;
