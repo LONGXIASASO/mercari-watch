@@ -1,0 +1,24 @@
+name: _probe_poca（临时探针，用完即删）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 缓存 Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: puppeteer-${{ runner.os }}-
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund
+      - name: 跑探针
+        run: node _probe_poca_test.js
