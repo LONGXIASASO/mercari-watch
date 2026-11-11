@@ -1,63 +1,64 @@
-// 临时探针：验证 GitHub Actions 机房能否穿过 pocamarket.com 的 Vercel challenge
-const puppeteer = require('puppeteer');
-const wait = ms => new Promise(r => setTimeout(r, ms));
+// 临时探针 v2：验证 GitHub Actions 机房能否直连 api.pocamarket.com 的新接口
+const https = require('https');
+const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+
+function get(host, path) {
+  return new Promise(resolve => {
+    const req = https.request({ host, path, method: 'GET', timeout: 25000, headers: {
+      'User-Agent': UA, Accept: 'application/json',
+      'Accept-Language': 'ko-KR,ko;q=0.9', 'POCA-DISPLAY-LANGUAGE': 'ko',
+      Referer: 'https://pocamarket.com/',
+    } }, res => {
+      let d = ''; res.setEncoding('utf8');
+      res.on('data', c => d += c);
+      res.on('end', () => resolve({ s: res.statusCode, d, h: res.headers }));
+    });
+    req.on('error', e => resolve({ s: 0, d: '', err: e.message }));
+    req.on('timeout', () => { req.destroy(); resolve({ s: -1, d: '', err: 'timeout' }); });
+    req.end();
+  });
+}
 
 (async () => {
-  const b = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
-  });
-  const p = await b.newPage();
-  await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
-  await p.setViewport({ width: 1280, height: 900 });
+  const q = encodeURIComponent('장하오');
+  console.log('== 1) 搜索首页');
+  const r1 = await get('api.pocamarket.com', '/card/gb/v2/search?q=' + q);
+  console.log('   status=' + r1.s + ' len=' + r1.d.length + (r1.err ? ' err=' + r1.err : ''));
+  if (r1.s === 200 && r1.d.trim().startsWith('{')) {
+    const j = JSON.parse(r1.d);
+    const d = j.data;
+    console.log('   count=' + d.count + ' next_page=' + d.next_page + ' n=' + d.results.length);
+    console.log('   首条: id=' + d.results[0].id + ' price=' + d.results[0].price
+      + ' cur=' + d.results[0].display_currency + ' localized=' + d.results[0].discounted_price_localized);
+    console.log('   字段: ' + Object.keys(d.results[0]).join(', '));
+  } else {
+    console.log('   返回: ' + r1.d.slice(0, 200).replace(/\s+/g, ' '));
+  }
 
-  console.log('== 1) 纯 https 直连（模拟现有 poca.js 的方式）');
-  const direct = await p.evaluate(async () => {
-    try {
-      const r = await fetch('https://pocamarket.com/apis/card/gb/v2/search?q=' + encodeURIComponent('장하오'));
-      const t = await r.text();
-      return { s: r.status, len: t.length, head: t.slice(0, 120) };
-    } catch (e) { return { err: e.message }; }
-  });
-  console.log('   直连结果:', JSON.stringify(direct));
+  console.log('== 2) 第 3 页');
+  const r2 = await get('api.pocamarket.com', '/card/gb/v2/search?q=' + q + '&page=3');
+  if (r2.s === 200) {
+    const j = JSON.parse(r2.d);
+    console.log('   count=' + j.data.count + ' next=' + j.data.next_page + ' 首条id=' + j.data.results[0].id);
+  } else console.log('   status=' + r2.s);
 
-  console.log('== 2) 打开页面，让 challenge 跑完');
-  await p.goto('https://pocamarket.com/zh-cn/search', { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await wait(15000);
-  console.log('   最终 URL:', p.url());
-  console.log('   标题:', await p.title());
+  console.log('== 3) 单卡详情');
+  const r3 = await get('api.pocamarket.com', '/card/gb/v2/520290');
+  if (r3.s === 200) {
+    const res = JSON.parse(r3.d).data.result;
+    console.log('   ' + res.id + ' | ' + res.name + ' | stock=' + res.stock + ' wish=' + res.wish_count
+      + ' price=' + JSON.stringify(res.price));
+  } else console.log('   status=' + r3.s);
 
-  console.log('== 3) 同源 fetch 搜索接口');
-  const api = await p.evaluate(async () => {
-    const r = await fetch('/apis/card/gb/v2/search?q=' + encodeURIComponent('장하오'), {
-      credentials: 'include', headers: { Accept: 'application/json' },
-    });
-    const t = await r.text();
-    let out = { s: r.status, len: t.length };
-    if (t.trim().startsWith('{')) {
-      const j = JSON.parse(t);
-      if (j.data && j.data.results) {
-        out.count = j.data.count;
-        out.n = j.data.results.length;
-        out.first = {
-          id: j.data.results[0].id,
-          name: j.data.results[0].name_en,
-          price: j.data.results[0].price,
-          cur: j.data.results[0].display_currency,
-        };
-      } else out.body = JSON.stringify(j).slice(0, 200);
-    } else out.head = t.slice(0, 150);
-    return out;
-  });
-  console.log('   接口结果:', JSON.stringify(api));
+  console.log('== 4) 抓 5 页耗时测试');
+  const t0 = Date.now();
+  let ok = 0;
+  for (let pg = 1; pg <= 5; pg++) {
+    const r = await get('api.pocamarket.com', '/card/gb/v2/search?q=' + q + '&page=' + pg);
+    if (r.s === 200) ok++;
+    await new Promise(r2 => setTimeout(r2, 300));
+  }
+  console.log('   5 页成功 ' + ok + ' / 耗时 ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
 
-  console.log('== 4) 页面渲染出的卡片数');
-  const dom = await p.evaluate(() => {
-    const t = document.body.innerText || '';
-    return { hasUSD: /USD/.test(t), cardText: t.split('\n').filter(l => /USD/.test(l)).slice(0, 3) };
-  });
-  console.log('   ', JSON.stringify(dom));
-
-  await b.close();
-  console.log('== 探针结束');
+  console.log('== 探针 v2 结束');
 })().catch(e => { console.error('探针异常:', e.message); process.exit(1); });
