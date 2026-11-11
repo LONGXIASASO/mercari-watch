@@ -252,12 +252,17 @@ function rawGet(p, timeout = 25000) {
   });
 }
 async function getJson(p, tries = 4) {
+  const seen = [];
   for (let i = 0; i < tries; i++) {
     const r = await rawGet(p);
+    seen.push(r.s + '/' + (r.d || '').length + (r.d && r.d.length < 12 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
     if (r.s === 200 && r.d && r.d.trim().startsWith('{')) { try { return JSON.parse(r.d); } catch (e) {} }
-    if (r.s === 404) return null;
+    // ⚠️ 404 不再默默吞掉：站方限速时整站返回 404 空体/1 字节，和「接口真的没了」长得一样，
+    //    以前直接 return null 导致日志只说「接口可能变更」，白查半天。这里记下每次尝试的状态码和体长。
+    if (r.s === 404) { global.LASTGET = p.split('?')[0] + ' → ' + seen.join(','); return null; }
     await sleep(400 * (i + 1));
   }
+  global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
   return null;
 }
 
@@ -285,7 +290,7 @@ async function fetchAll() {
     const qs = cursor ? '&page=' + encodeURIComponent(cursor) : '';
     const j = await getJson(`/card/v3/search?q=${encodeURIComponent(Q)}${qs}`);
     if (!j || !Array.isArray(j.results)) {
-      if (page === 0) throw new Error('首页抓取失败，接口可能变更');
+      if (page === 0) throw new Error('首页抓取失败，接口可能变更｜' + (global.LASTGET || '无请求记录'));
       if (++failed > 3) throw new Error(`搜索翻页连续失败 ${failed} 次，放弃本次`);
       continue;
     }
