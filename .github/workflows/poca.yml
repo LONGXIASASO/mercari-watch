@@ -82,6 +82,29 @@ jobs:
           HARD_FAIL=""
           fetch state.json "$BASE/state.json" || HARD_FAIL="$HARD_FAIL state.json"
           fetch pchg.json  "$BASE/pchg.json"  || HARD_FAIL="$HARD_FAIL pchg.json"
+          # 明细永久档案 darc.json（挂单/成交累积，越过站方「最多 5 条」上限）。
+          # 和 pchg 一样怕「空档案覆盖」：只有 HTTP 404（首次还没建）才允许当空档案起步，
+          # 超时/5xx/403 一律重试到放弃 → 整轮中止，绝不拿空的把那几百条累积记录冲掉。
+          fetch_darc() {
+            local f="darc.json" url="$BASE/darc.json" i code
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -sSL --max-time 30 --retry 2 --retry-delay 1 -o "poca/$f" -w '%{http_code}' "$url" || true)
+              if [ "$code" = "200" ] && [ -s "poca/$f" ]; then
+                echo "  ✅ $f 第 $i 次拿到，$(stat -c%s "poca/$f") 字节"
+                return 0
+              fi
+              if [ "$code" = "404" ]; then
+                echo "  ℹ️ $f 尚不存在（首次建明细档案），本轮从空开始累积"
+                rm -f "poca/$f"
+                return 0
+              fi
+              echo "  ⚠️ $f 第 $i 次取不到（HTTP ${code:-timeout}），3 秒后重试"
+              sleep 3
+            done
+            rm -f "poca/$f"
+            return 1
+          }
+          fetch_darc || HARD_FAIL="$HARD_FAIL darc.json"
           fetch wish.json  "$BASE/wish.json"  || echo "  wish.json 没有，本轮重抓收藏排名"
           # 星标清单存在 main 分支（poca/stars.json，由页面写入）。不能放 poca-data：
           # 那是每轮 force push 的单 commit 分支，会把它冲掉。
@@ -91,7 +114,7 @@ jobs:
           if [ -n "$HARD_FAIL" ]; then
             if [ "${{ github.event.inputs.bootstrap }}" = "1" ]; then
               echo "::warning::state/pchg 取不到（$HARD_FAIL），但 bootstrap=1，允许从零建档案"
-              rm -f poca/state.json poca/pchg.json
+              rm -f poca/state.json poca/pchg.json poca/darc.json
             else
               echo "::error::poca-data 上的$HARD_FAIL 重试 6 次仍取不到 —— 本轮中止，绝不用空档案覆盖线上。确需从零建，请手动触发并填 bootstrap=1"
               exit 1
@@ -169,6 +192,8 @@ jobs:
           [ -f poca/wish.json ] && cp poca/wish.json /tmp/pub/
           # 永久价格档案：单独文件，越滚越大，不能塞进 state.json
           if [ -f poca/pchg.json ]; then cp poca/pchg.json /tmp/pub/; fi
+          # 永久明细档案：同样单独文件，只增不减
+          if [ -f poca/darc.json ]; then cp poca/darc.json /tmp/pub/; fi
           cd /tmp/pub
           git init -q -b poca-data
           git config user.name "poca-watch-bot"
