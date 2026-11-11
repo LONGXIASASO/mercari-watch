@@ -68,6 +68,19 @@ function seriesOf(arc, idx, max) {
   return out.slice(-max);          // 只留最近的 max 条
 }
 
+// 最高求购的真实观测：pchg 第 5 位（2026-11-11 起才写入），0 = 当时没人求购，跳过不记
+function seriesOfBuy(arc, max) {
+  const out = [];
+  let prev = null;
+  for (const e of arc || []) {
+    const v = Number(e[4]) || 0;
+    if (v <= 0 || v === prev) continue;
+    prev = v;
+    out.push([v, String(e[0])]);
+  }
+  return out.slice(-max);
+}
+
 // ── 历史推算 ────────────────────────────────────────────────────────────
 // 改版后接口不再给「求购 / 成交」，但改版前攒下的卖家挂单(s)和历史成交(m)还在
 // detcarry.json 里。用它们反推改版前的匹配价走势，供详情页「匹配价记录」补前半段。
@@ -218,14 +231,48 @@ async function fetchAll() {
   return { count: all.length, list: all, pages: page, failed };
 }
 
-// ── 每卡挂单明细 ──
-// 2026-11-11：/card/v1/<id>/sell|buy|matching 三个端点在新主机 phocamarket.com 上**已恢复**
-//   （返回 {count, results:[{id, create_date, price}]}，与 fetchDetailsLegacy 的 rows() 完全对得上）。
-//   但现在前端只渲染 hs/hq/hb + h，没有「挂单/求购分布」的展示位，抓了也是白抓（每轮多 3000 次请求）。
-//   → 先保留空壳；要接回来的话：让 fetchDetails 直接 return fetchDetailsLegacy(ids)，
-//     再把 detail[id].s/b 接进下方 det 构建和前端详情页（hb 也可以改用它算实时最高求购）。
+// ── 每卡详情：最高求购 / 最近成交 / 速切库存 ──
+// 2026-11-11 挖到的权威源：GET /card/v1/<id>（韩站主机 phocamarket.com 的单卡详情，字段沿用旧版命名）
+//   get_highest_buy_price            → 最高求购        （v3 搜索完全没有）
+//   get_matching_price               → 最近匹配成交    （v3 搜索完全没有）
+//   get_collection_transaction_price → 速切最近成交    （v3 搜索完全没有）
+//   get_collection_count             → 速切库存件数    （v3 搜索只给 is_stocked 布尔，所以页面之前只显示「库 1」）
+//
+// 同一时点比对 1020 张：get_lowest_sell_price / get_collection_lowest_sell_offer_price
+//   与 v3 的 transaction_sell_price / offer_price **100% 一致**，有货判定也 1020/1020 —— 同源同池，可放心混用。
+// 代价：每卡 1 次请求（约 1034 次/轮，16 并发实测 20 秒），比旧版 sell+buy+matching 三次省 2/3。
+//
+// ⚠️ /card/v1/<id>/sell 的 count 不能当库存：抽 60 张在售卡，34 张返回 0（那是「匹配挂单」池，不是速切库存），
+//    且历史挂单 >5 条的卡现在一律只回 5 条（服务端硬截断）。库存只认 get_collection_count。
 async function fetchDetails(ids) {
-  return {};
+  const out = {};
+  let next = 0, fails = 0, done = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= ids.length) return;
+      const id = ids[i];
+      const j = await getJson(`/card/v1/${id}`, 2);
+      if (!j || !j.id) { fails++; }
+      else {
+        const rec = {};
+        const b = num(j.get_highest_buy_price);
+        const mp = num(j.get_matching_price);
+        const t = num(j.get_collection_transaction_price);
+        if (b > 0) rec.b = b;
+        if (mp > 0) rec.mp = mp;
+        if (t > 0) rec.t = t;
+        // 库存单独存：0 也是有效值（真的没货），不能用 num() 的 >0 过滤
+        const st = j.get_collection_count;
+        if (st !== null && st !== undefined && isFinite(Number(st))) rec.st = Math.max(0, Number(st));
+        if (Object.keys(rec).length) out[id] = rec;
+      }
+      if (++done % 250 === 0) console.log(`  单卡详情 ${done}/${ids.length} 失败 ${fails}`);
+    }
+  }
+  await Promise.all(Array.from({ length: CONC_DETAIL }, worker));
+  if (fails > ids.length * 0.3) throw new Error(`单卡详情失败 ${fails}/${ids.length}，放弃本次`);
+  return out;
 }
 
 // 旧实现（留档，等站方恢复或找到新端点在接回来）
@@ -457,18 +504,20 @@ const KIND_KR2EN = {
     // ⚠️ 2026-11-02 v3 字段对照（拿旧快照逐张比对过，几乎是 1:1）：
     //    transaction_sell_price → 旧 get_lowest_sell_price   （匹配最低价，404 张有值，完全吻合）
     //    offer_price            → 旧 get_collection_lowest_sell_offer_price（速切最低价，769 张有值，完全吻合）
-    //    求购(wished_sells 全空)、最近成交、速切成交：v3 不再提供 → 走 carry 保底，见上方注释。
+    //    求购(wished_sells 全空)、最近成交、速切成交：v3 不给 → 2026-11-11 起改由
+    //    /card/v1/<id> 单卡详情实时提供（fetchDetails），只有接口失败时才回落 carry 保底。
     const p = num(r.transaction_sell_price);                  // 匹配：最低卖价
     const q = num(r.offer_price);                             // 速切：最低卖价
-    // 实时值：v3 目前恒为 0。将来若站方恢复这几个字段，把对应变量改成读接口即可，
-    // 下面的保底逻辑会自动让位（实时值优先）。
-    const liveB = 0, liveMp = 0, liveT = 0;
+    // 实时值：来自 /card/v1/<id> 单卡详情（fetchDetails），拿不到才回落 carry 保底
+    const dv = detail[r.id] || {};
+    const liveB = num(dv.b), liveMp = num(dv.mp), liveT = num(dv.t);
     const hold = carry.d[r.id] || null;
     const b = liveB || (hold ? num(hold[0]) : 0);              // 最高求购
     const mp = liveMp || (hold ? num(hold[1]) : 0);            // 最近匹配成交
     const t = liveT || (hold ? num(hold[2]) : 0);              // 速切最近成交
     const fromCarry = (b > 0 && !liveB) || (mp > 0 && !liveMp) || (t > 0 && !liveT);
-    const stock = r.is_stocked ? 1 : 0;                       // 新版只给布尔「有无在售」
+    // 库存：优先真实件数（get_collection_count），拿不到才回落 v3 的布尔
+    const stock = (dv.st === undefined) ? (r.is_stocked ? 1 : 0) : dv.st;
 
     // 存档：本轮拿到的（实时或沿用）值留作下一轮的保底
     if (b > 0 || mp > 0 || t > 0) carryNext[r.id] = [b, mp, t];
@@ -500,14 +549,18 @@ const KIND_KR2EN = {
       if (arr.length > HIST_MAX) arr = arr.slice(-HIST_MAX);
       hist[r.id] = arr;
       histAdded++;
-      // 永久档案：同一份点也进 pchg.json，永不裁剪
-      // ⚠️ 页面只显示近 HIST_KEEP_DAYS 天，而 state.json 的 hist 会被裁掉，
-      //    想要长历史就只能单独存档。成交接口下线后，这份价格史是唯一能长期积累的真数据。
+    }
+    // 永久档案：同一份点也进 pchg.json，永不裁剪
+    // ⚠️ 页面只显示近 HIST_KEEP_DAYS 天，而 state.json 的 hist 会被裁掉，
+    //    想要长历史就只能单独存档。成交接口下线后，这份价格史是唯一能长期积累的真数据。
+    // 2026-11-11 起第 5 位存「最高求购」（0 = 没人求购），求购单独变化也记一条 ——
+    //    否则求购只在卖价同时变动时才留痕，详情页的求购记录会大片断档。
+    {
       const arc = pchg[r.id] || (pchg[r.id] = []);
       const la = arc[arc.length - 1];
-      // 只看匹配价/速切价：速切成交(t)现在是保底常数，跟着它比会一直判成「没变化」
-      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1]) {
-        arc.push([stamp, cur[0], cur[1], cur[2]]);
+      const laB = la ? (Number(la[4]) || 0) : -1;
+      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1] || laB !== b) {
+        arc.push([stamp, cur[0], cur[1], cur[2], b]);
         if (arc.length > ARCH_MAX) arc.splice(0, arc.length - ARCH_MAX);
         archAdded++;
       }
@@ -557,7 +610,7 @@ const KIND_KR2EN = {
   // 5) 详情页三段「记录」（前端 secList 直接渲染，格式 [价, 时间, 可选标记]）：
   //    hs = 匹配价格记录：前半段用改版前的挂单/成交反推（带 '~'），后半段是 10-23 起的真实观测
   //    hq = 速切价格记录：速切没有历史明细，只有真实观测
-  //    hb = 最高求购记录：接口已不提供，只有 11-01 前攒下的（detcarry 的 b 列），之后定格
+  //    hb = 最高求购记录：2026-11-11 起实时抓（get_highest_buy_price），前面接 11-01 前的推算段
   //    ⚠️ 真实观测一条都不删 —— 每 10 分钟抓一次、亲眼看到的变动全部保留，用户要看完整过程
   //    h  = 近 2 日涨跌要用的原始序列，别删
   const det = {};
@@ -586,13 +639,25 @@ const KIND_KR2EN = {
     if (hs.length) rec.hs = hs.slice(-REC_MAX);
     if (realQ.length) rec.hq = realQ;
 
-    if (dc) {
-      if (dc.b && dc.b.length) {
-        const hb = trimSeries(dc.b, true);          // 求购看「最高价」
-        if (hb.length) rec.hb = hb.slice(-REC_MAX);
+    // 最高求购：2026-11-11 起从 /card/v1/<id> 的 get_highest_buy_price 实时抓（pchg 第 5 位），
+    // 前面接 11-01 前攒下的推算段（带 '~'），两段同样以「第一条真实观测」为界，不重叠。
+    const realB = seriesOfBuy(arc, REC_MAX);
+    let histB = [];
+    if (dc && dc.b && dc.b.length) {
+      histB = trimSeries(dc.b, true);               // 求购看「最高价」
+      if (realB.length) {
+        const firstDay = String(realB[0][1]).slice(0, 10);
+        histB = histB.filter(x => x[1] < firstDay);
+        if (histB.length && histB[histB.length - 1][0] === realB[0][0]) histB.pop();
       }
-      rec.da = detCarry.at;
+      histB = histB.map(x => [x[0], x[1], '~']);
     }
+    const hb = [...histB, ...realB];
+    if (hb.length) {
+      rec.hb = hb.slice(-REC_MAX);
+      if (realB.length) rec.hbLive = 1;             // 有实测段 → 前端副标题改写「实时」
+    }
+    if (dc) rec.da = detCarry.at;
 
     const h = hist[r.id];
     if (h && h.length >= 2) rec.h = h;
@@ -630,12 +695,12 @@ const KIND_KR2EN = {
     console.log(`   价格档案 ${Object.keys(pchg).length} 张卡 / ${pts} 个点（种子 ${archSeed} 张，本轮新增 ${archAdded} 点，永不裁剪）`);
   }
   console.log(`   ${items.length} 张 | 有 1:1 ${out.stats.p} | 有速购 ${out.stats.q} | 跌价 ${nDown} | 上新 ${nFresh} | 新增价格记录 ${histAdded} 点`);
-  console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张（保底值，最后确认 ${carryAt || '无'}）`);
+  console.log(`   求购 ${items.filter(x => x.b > 0).length} 张 | 最近成交 ${items.filter(x => x.mp > 0).length} 张 | 速切成交 ${items.filter(x => x.t > 0).length} 张 | 有库存 ${items.filter(x => x.stock > 0).length} 张（合计 ${items.reduce((s, x) => s + (x.stock || 0), 0)} 件）`);
   {
     const dv = Object.values(det);
     const tot = k => dv.reduce((s, x) => s + ((x[k] || []).length), 0);
     const est = dv.reduce((s, x) => s + ((x.hs || []).filter(e => e[2] === '~').length), 0);
-    console.log(`   记录：匹配价 ${dv.filter(x => x.hs).length} 张(${tot('hs')} 条，其中推算 ${est} 条) | 速切价 ${dv.filter(x => x.hq).length} 张(${tot('hq')} 条) | 最高求购 ${dv.filter(x => x.hb).length} 张(${tot('hb')} 条，定格 ${detCarry.at || '无'})`);
+    console.log(`   记录：匹配价 ${dv.filter(x => x.hs).length} 张(${tot('hs')} 条，其中推算 ${est} 条) | 速切价 ${dv.filter(x => x.hq).length} 张(${tot('hq')} 条) | 最高求购 ${dv.filter(x => x.hb).length} 张(${tot('hb')} 条，其中实时 ${dv.filter(x => x.hbLive).length} 张)`);
   }
   console.log(`   耗时 ${out.elapsed}s`);
 })().catch(e => { console.error('❌ 抓取失败：', e.message); process.exit(1); });
