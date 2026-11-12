@@ -262,6 +262,8 @@ const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢
 //   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
 //   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
 const SKIP_DETAIL = process.argv.includes('--skip-detail');
+// 跳过明细时，上一轮 data.json 里的 det（含挂单「仍在挂」标记），由 workflow 拉取后提供
+let PREV_DET = {};
 const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足这么多分钟就跳过
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -710,9 +712,22 @@ const KIND_KR2EN = {
 
   // 3) 明细（挂单 / 成交）——请求量最大、最容易触发限速的一段，可整段跳过
   const ids = main.list.map(r => r.id);
+  // ⚠️ 2026-11-12 16:20：走 Cloudflare 中转后受每天 10 万请求限制，明细改成隔轮抓。
+  //    但明细不能只是「不抓就走档案」：darc 里没有「本轮仍在挂」这个状态位，
+  //    从档案重建会把所有挂单降成浅色（历史），页面会隔一轮闪一次。
+  //    所以跳过明细的轮次，直接沿用上一轮 data.json 里下发的 ds/dm（标记原样保留）。
+  //    上一轮文件由 workflow 从 poca-data 拉到 poca/data.prev.json；拉不到才退回档案兜底。
+  if (SKIP_DETAIL) {
+    try {
+      const p = path.join(HERE, 'data.prev.json');
+      if (fs.existsSync(p)) PREV_DET = JSON.parse(fs.readFileSync(p, 'utf8')).det || {};
+    } catch (e) {
+      console.log('上一轮 data.json 读不了，明细退回档案兜底：' + e.message);
+    }
+  }
   const detail = SKIP_DETAIL ? {} : await fetchDetails(ids);
   if (SKIP_DETAIL) {
-    console.log(`明细按 --skip-detail 跳过（省约 1500 请求）；darc.json 历史档案原样保留，页面沿用往轮记录`);
+    console.log(`明细按 --skip-detail 跳过（省约 1300 请求）；沿用上一轮 ${Object.keys(PREV_DET).length} 张卡的挂单/成交记录，标记不变`);
   } else {
     console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
   }
@@ -972,7 +987,12 @@ const KIND_KR2EN = {
     const dvNow = detail[r.id];
     const nowSet = new Set((dvNow && dvNow.ds ? dvNow.ds : []).map(e => `${e[0]}|${e[1]}`));
     const arcD = darc[r.id];
-    if (arcD && arcD.s && arcD.s.length) {
+    const pv = PREV_DET[r.id];
+    if (pv && (pv.ds || pv.dm)) {
+      // 跳过明细的轮次：整块沿用上一轮（第三位「仍在挂」标记保持原样，不闪烁）
+      if (pv.ds && pv.ds.length) rec.ds = pv.ds;
+      if (pv.dm && pv.dm.length) rec.dm = pv.dm;
+    } else if (arcD && arcD.s && arcD.s.length) {
       const rows = arcD.s.map(e => nowSet.has(`${e[0]}|${e[1]}`) ? [e[0], e[1], 1] : [e[0], e[1]]);
       rec.ds = capKeepNow(dedupeCoarse(rows), REC_D_MAX);
     } else if (dvNow && dvNow.ds && dvNow.ds.length) {
