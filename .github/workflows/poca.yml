@@ -162,27 +162,26 @@ jobs:
       - name: 出口网络自检（Node 版本 / 出口 IP / 两种 UA）
         run: node poca/_selfcheck.js
 
-      # ⚠️ 2026-11-12 14:00 起站方按**来源 IP 归属地区**分流（证据见 _selfcheck.js 头注释）：
-      #    GitHub runner（美国 Azure）整站 404/39，本机（中国出口）稳定 200。
-      #    这不是我们坏了，也不是接口搬家，等站方灰度结束会自己恢复。
-      #    所以这里先探一次：通就正常抓，不通就静默跳过本轮（SKIP=1），**不再刷失败通知**。
-      - name: 通路预检（站方按出口地区分流时静默跳过）
+      # ⚠️ 2026-11-12 16:00 起改走 Cloudflare Worker 中转（出口不再是 Azure 机房 IP）。
+      #    站方按出口 IP 归属分流：runner 直连 → 国际站后端 → 无 /card/v3 路由 → 404/39；
+      #    经 Worker 出站 → 2026-11-12 16:08 实测 search/v1/sell/matching 全 200，
+      #    verdict=PASS colo=IAD，20 并发 0 失败。
+      #    预检打的是中转而不是站方，逻辑不变：通就抓，不通静默跳过本轮。
+      - name: 通路预检（经中转探测，不通就静默跳过）
         id: gate
         run: |
           CODE=$(curl -sS -m 20 -o /tmp/gate.bin -w '%{http_code}' \
             -H 'Accept: application/json' \
-            -H 'User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)' \
-            -H 'Accept-Language: ko-KR,ko;q=0.9' -H 'POCA-DISPLAY-LANGUAGE: ko' \
-            -H 'Referer: https://pocamarket.com/' \
-            'https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4' || echo 000)
+            -H 'x-poca-key: poca_9f3k2m7xq4wzv8hd' \
+            'https://poca-proxy.1140382718.workers.dev/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4' || echo 000)
           SIZE=$(stat -c%s /tmp/gate.bin 2>/dev/null || echo 0)
           echo "预检 HTTP $CODE size=$SIZE"
           if [ "$CODE" = "200" ] && [ "$SIZE" -gt 500 ]; then
-            echo "✅ 通路正常，开始抓取"
+            echo "✅ 中转通路正常，开始抓取"
             echo "ok=1" >> "$GITHUB_OUTPUT"
           else
-            echo "⏭ 通路被站方按出口地区拦下（非本仓库故障），本轮静默跳过"
-            echo "   出口 IP: $(curl -sS -m 10 https://api.ipify.org || echo '?')"
+            echo "⏭ 中转不通，本轮静默跳过"
+            echo "   预检体: $(head -c 200 /tmp/gate.bin 2>/dev/null)"
             echo "ok=0" >> "$GITHUB_OUTPUT"
             echo "SKIP=1" >> "$GITHUB_ENV"
           fi
@@ -192,6 +191,9 @@ jobs:
         env:
           POCA_Q: 장하오
           POCA_CONC: '16'
+          # 走 Cloudflare Worker 中转，绕开 Azure 机房 IP 被判「国际站」
+          POCA_HOST: poca-proxy.1140382718.workers.dev
+          POCA_KEY: poca_9f3k2m7xq4wzv8hd
         run: |
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
             node poca/poca.js --min-gap 2 --skip-wish
