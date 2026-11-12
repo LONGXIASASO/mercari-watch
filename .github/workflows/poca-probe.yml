@@ -15,10 +15,4 @@ jobs:
         uses: actions/checkout@v4
       - name: 出口 IP + 两种 UA（对照组）
         continue-on-error: true
-        run: node poca/_probe5.js
-      - name: 真正的抓取脚本（实验组，只看前 3 页）
-        continue-on-error: true
-        env:
-          POCA_Q: 장하오
-          POCA_CONC: '4'
-        run: timeout 150 node poca/poca.js --skip-wish || echo "（脚本退出，见上面的日志）"
+        run: node poca/_probe6.js
