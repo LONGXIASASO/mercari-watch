@@ -61,12 +61,16 @@ function get(url, withKey = true, timeout = 25000) {
     process.exit(2);
   }
 
-  // 2) 搜索
+  // 3) 搜索
   console.log('\n── 2. 搜索经中转 ──');
   const q = encodeURIComponent('장하오');
   const s1 = await get(BASE + '/card/v3/search?q=' + q);
   let list = [];
-  try { list = (JSON.parse(s1.d).data || []).map(x => x.id).filter(Boolean); } catch (e) {}
+  try {
+    const j = JSON.parse(s1.d);
+    // 站方 v3 字段是 results（不是 data），这里三个都兼容，免得下次又数成 0
+    list = (j.results || j.data || j.items || []).map(x => x.id).filter(Boolean);
+  } catch (e) {}
   console.log('  status=' + s1.s + '  ' + s1.ms + 'ms  bytes=' + s1.d.length + '  ids=' + list.length);
   if (s1.s !== 200 || !list.length) { console.log('  ✗ 搜索不通：' + s1.d.slice(0, 160)); process.exit(3); }
 
