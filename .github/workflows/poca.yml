@@ -2,12 +2,22 @@ name: Poca 卡市监控
 
 # 抓 장하오 全量卡（约 1036 张），全天不停（含夜间）。
 # ⚠️ 2026-11-12 16:00 起走 Cloudflare Worker 中转，出口不再是 Azure 机房 IP。
-#    价格（匹配/速切最低价 + 涨跌）每 10 分钟一轮；求购/成交/库存件数/挂单明细约 55 分钟一轮。
-#    分工原因与预算见「抓取 Poca」步骤的注释（免费额度 10 万请求/天）。
+#    每轮全量：价格 + 求购 + 成交 + 库存件数 + 挂单明细，全部 10 分钟一更（一轮约 75 秒）。
+#    一轮约 187 次 Worker 请求（批量 20 路/次），一天 2.7 万，免费额度 10 万里余量七成。
 # GitHub 自带 schedule 很不准（整点最挤，可能推迟几十分钟甚至跳过），
 # 所以主力仍是 cron-job.org 每 10 分钟 POST 一次 workflow_dispatch，schedule 只当兜底。
 # 两条调度会互相撞：脚本内部 --min-gap 8 会挡住同一时段的重复触发，
-# 不会挡掉正常的一轮（快跑轮约 20 秒，完整轮约 60 秒）。
+# 不会挡掉正常的一轮（单轮约 75 秒）。
+#
+# ⚠️ 触发时刻的约定（2026-11-12 17:50 记下，别忘）：
+#    实测 cron-job.org 是在 :00 :10 :20 … 整十分触发的（#2465~#2472 时间戳可证），
+#    一轮 75 秒 → 数据要到 :01:15 才发布，看起来就不像「整十分在更新」。
+#    要做出整十分的体感，得把 **cron-job.org 那边的触发时刻**改成 :09 :19 :29 :39 :49 :59
+#    （提前 1 分钟触发，跑完正好落在整十分之后）。
+#    改的同时这条 cron 要跟着错开成 '03,13,23,33,43,53'（比外部早 6 分钟，
+#    它那一次会被 --min-gap 8 挡掉，等于纯兜底）。
+#    目前**故意没改**：并发还是 2，先按现状跑一段观察限速情况。
+#
 # 收藏排名：一天只抓一次，安排在北京时间 1:30 之后那一场，其余轮次沿用缓存。
 
 on:
@@ -183,7 +193,7 @@ jobs:
           #    这样 Worker 里是哪串都能自愈；日志会打印 key=xxx → HTTP yyy，对不上时一眼看见。
           FOUND=""
           for K in poca_9f3k2m7xq4wzv8hd; do
-            CODE=$(curl -sS -m 20 -o /tmp/gate.bin -w '%{http_code}' \
+            CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/gate.bin -w '%{http_code}' \
               -H 'Accept: application/json' -H "x-poca-key: $K" \
               'https://poca-proxy.1140382718.workers.dev/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4' || echo 000)
             SIZE=$(stat -c%s /tmp/gate.bin 2>/dev/null || echo 0)
@@ -191,20 +201,52 @@ jobs:
             if [ "$CODE" = "200" ] && [ "$SIZE" -gt 500 ]; then FOUND="$K"; break; fi
           done
           GATEBODY="$(head -c 200 /tmp/gate.bin 2>/dev/null)"
+
+          # 站方在响应头里自报「把这次访问归到哪个站点」，这是判断地区分流最硬的证据：
+          #   poca-display-language: ko → 韩站路由（我们要的，有 /card/v3 路由）
+          #                          en → 国际站后端（一直在躲的那套，没有 v3 路由 → 404/39）
+          # 每轮都打进日志，以后出事能直接看出「是从哪天开始变 en 的」，不用再猜。
+          hdr() { grep -i "^$1:" /tmp/gate.hdr 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1; }
+          LANG=$(hdr 'poca-display-language')
+          CURR=$(hdr 'poca-display-currency')
+          SRV=$(hdr 'server')
+          echo "站方判定：language=${LANG:-?} currency=${CURR:-?} server=${SRV:-?}"
+          DETAIL="HTTP $CODE · ${SIZE} 字节 · 站方判为 ${LANG:-?}"
+
           if [ -n "$FOUND" ]; then
             echo "✅ 中转通路正常（生效 key=$FOUND）"
             echo "ok=1" >> "$GITHUB_OUTPUT"
             echo "GATEKEY=$FOUND" >> "$GITHUB_ENV"
           else
-            # 我们自己代码返回的 forbidden（鉴权没对上）必须吵；网络不通才静默
+            # ⚠️ 分类必须在预检这里就分清：三种「404」的处置方式完全不同，
+            #    混成一个「挂了」后面就没法判断到底是限速（会自愈）、地区分流（要换出口）
+            #    还是我们自己的鉴权问题（改代码）。
+            #    时间型启发式，够用：体 1~2 字节 = 限速；39 字节 NOT_FOUND = 国际站后端。
             if printf '%s' "$GATEBODY" | grep -q forbidden; then
-              echo "::error::Worker 鉴权失败（候选 key 全部 403）—— Cloudflare 里的 KEY 与 workflow 都不一致"
-              exit 1
+              REASON="AUTH"
+            elif [ "$CODE" = "000" ]; then
+              REASON="NETWORK"
+            elif [ "$SIZE" -le 2 ]; then
+              REASON="RATE_LIMIT"
+            elif printf '%s' "$GATEBODY" | grep -q NOT_FOUND; then
+              REASON="REGION"
+            elif [ "${CODE#5}" != "$CODE" ]; then
+              REASON="UPSTREAM_5XX"
+            else
+              REASON="UNKNOWN"
             fi
-            echo "⏭ 中转不通，本轮静默跳过"
+            echo "⏭ 中转不通（原因 $REASON）$DETAIL，本轮静默跳过"
             echo "   预检体: $GATEBODY"
             echo "ok=0" >> "$GITHUB_OUTPUT"
             echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "GATE_REASON=$REASON" >> "$GITHUB_ENV"
+            echo "GATE_DETAIL=$DETAIL" >> "$GITHUB_ENV"
+            # 我们自己代码坏了必须立刻吵，不能等 40 分钟阈值
+            if [ "$REASON" = "AUTH" ]; then
+              echo "GATE_URGENT=1" >> "$GITHUB_ENV"
+              echo "::error::Worker 鉴权失败（403 forbidden）—— Cloudflare 里的 KEYS 被改成了非空，或与 workflow 不一致"
+              exit 1
+            fi
           fi
 
           # 批量端点单独验一次：这是我们自己的代码，坏了必须吵，不能静默跳过
@@ -222,6 +264,10 @@ jobs:
             echo "批量端点(20路) HTTP $BCODE 大小 $(stat -c%s /tmp/gate_b.bin 2>/dev/null || echo 0)"
             echo "   体: $(head -c 160 /tmp/gate_b.bin 2>/dev/null)"
             if [ "$BCODE" != "200" ] || ! grep -q '"r"' /tmp/gate_b.bin 2>/dev/null; then
+              # 同样是「我们自己的代码坏了」，立即告警，不等停更阈值
+              echo "GATE_URGENT=1" >> "$GITHUB_ENV"
+              echo "GATE_REASON=BATCH" >> "$GITHUB_ENV"
+              echo "GATE_DETAIL=批量端点 HTTP $BCODE" >> "$GITHUB_ENV"
               echo "::error::批量端点 /__batch 不可用（HTTP $BCODE）—— Cloudflare Worker 需要重新粘贴带批量端点的代码"
               exit 1
             fi
@@ -261,6 +307,23 @@ jobs:
             exit 0
           fi
           node -e "const d=require('./poca/data.json'); console.log('条数',d.items.length,'抓取用时',d.elapsed+'s','更新于',d.at_cn)"
+
+      # ⚠️ 告警只做一件事：数据停了让你知道，同时不刷屏。
+      #    判据是「距上次成功更新多久」，而不是「本轮成没成功」——
+      #    限速一般几分钟自愈，按轮次告会 10 分钟一条，纯噪音。
+      #    < 40 分钟不发；40~46 分钟发一条；之后每满 60 分钟再提醒一次。
+      #    阈值、原因分类文案都在 poca/_alert.js 里，要调改那里。
+      #    预检失败的原因（RATE_LIMIT / REGION / AUTH …）由上面的步骤写进 GATE_REASON。
+      - name: 异常告警（停更 / 限速 / 代码问题）
+        if: always()
+        continue-on-error: true
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          POCA_AT_MOBILES: ${{ secrets.DINGTALK_AT_MOBILES }}
+          GATE_OK: ${{ steps.gate.outputs.ok }}
+          JOB_STATUS: ${{ job.status }}
+        run: node poca/_alert.js
 
       - name: 推送降价到钉钉
         if: env.SKIP != '1'
