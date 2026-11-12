@@ -17,7 +17,7 @@ jobs:
 
       - name: 探测矩阵
         continue-on-error: true
-        run: node poca/_probe3.js
+        run: node poca/_probe4.js
 
       - name: 对照（curl 走系统栈）
         continue-on-error: true
