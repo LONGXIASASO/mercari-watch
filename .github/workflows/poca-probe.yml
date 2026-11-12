@@ -1,9 +1,9 @@
-name: Poca 中转吞吐测试（手动）
+name: Poca 出口改道测试（手动）
 
-# 上一轮探测结论：GitHub runner（Azure 美国，出口 172.174.166.196）直连韩站 404/39，
-# 但走 api.allorigins.win 中转 → HTTP 200 / 7670 字节 / 含 transaction_sell_price。
-# 说明站方判的是**出口 IP 归属地区**，换一条出口就通。
-# 本轮验证：这个免费中转能扛多少请求、有无缓存、延迟多少 —— 决定能不能直接接管 Actions。
+# 已知：GitHub runner 出口（Azure 美国）被韩站分流到国际站后端 → 整站 404/39。
+# 已知：jina.ai（跑在 Cloudflare 上）能拿到韩站数据 → **Cloudflare 网络的出口是通行的**。
+# 本轮测：在 Actions 内把出站流量转到 Cloudflare WARP，看出口 IP 变了之后能不能直接 200。
+# 两条路都试：① 原生 WireGuard（wgcf）② 用户态 warp-plus。任一成功 → Actions 可复活。
 on:
   workflow_dispatch: {}
 
@@ -12,71 +12,56 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: 中转吞吐与缓存测试
+      - name: 基线
         run: |
-          node -e '
-          const HOST = "https://phocamarket.com";
-          const PX = u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u);
-          const UA = "PocaMarket/2.7.4 (iPhone; iOS 18.0)";
-          const sleep = ms => new Promise(z => setTimeout(z, ms));
-          async function get(u, timeout = 30000) {
-            const c = new AbortController();
-            const t = setTimeout(() => c.abort(), timeout);
-            const t0 = Date.now();
-            try {
-              const r = await fetch(u, { signal: c.signal, headers: { "User-Agent": UA, "Accept": "application/json" } });
-              const d = await r.text();
-              return { s: r.status, len: d.length, ms: Date.now() - t0, d };
-            } catch (e) { return { s: 0, len: 0, ms: Date.now() - t0, d: "", err: e.name }; }
-            finally { clearTimeout(t); }
-          }
-          (async () => {
-            // 1) 拿一页搜索，取 24 个 id
-            const s = await get(PX(HOST + "/card/v3/search?q=" + encodeURIComponent("장하오")));
-            console.log("搜索: HTTP", s.s, "size", s.len, "ms", s.ms);
-            let ids = [];
-            try { ids = (JSON.parse(s.d).results || []).map(r => r.id); } catch (e) { console.log("解析失败:", s.d.slice(0, 80)); }
-            console.log("拿到 id:", ids.length);
-            if (!ids.length) return;
+          echo "当前出口: $(curl -sS -m 12 https://api.ipify.org)"
+          curl -sS -m 20 -o /dev/null -w "直连韩站 HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
+            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
 
-            // 2) 详情接口连打（并发 4），统计成功率与延迟
-            const pick = ids.slice(0, 24);
-            for (const conc of [4, 8]) {
-              let ok = 0, bad = 0, ms = [], codes = {};
-              let i = 0;
-              const t0 = Date.now();
-              async function w() {
-                while (i < pick.length) {
-                  const id = pick[i++];
-                  const r = await get(PX(HOST + "/card/v1/" + id));
-                  codes[r.s] = (codes[r.s] || 0) + 1;
-                  if (r.s === 200 && r.d.trim().startsWith("{")) { ok++; ms.push(r.ms); } else bad++;
-                }
-              }
-              await Promise.all(Array.from({ length: conc }, w));
-              const total = (Date.now() - t0) / 1000;
-              const avg = ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length) : 0;
-              const mx = ms.length ? Math.max(...ms) : 0;
-              console.log(`并发${conc}: ${pick.length} 个详情 | 成功 ${ok} 失败 ${bad} | 状态码 ${JSON.stringify(codes)} | 平均 ${avg}ms 最慢 ${mx}ms | 总耗时 ${total.toFixed(1)}s`);
-              console.log(`  → 推算 1036 张详情约需 ${Math.round(1036 / pick.length * total)}s`);
-              await sleep(1500);
-            }
+      - name: ① 原生 WARP（wgcf + wg-quick）
+        id: wg
+        continue-on-error: true
+        run: |
+          set -x
+          curl -sSL -m 60 -o /tmp/wgcf "https://github.com/ViRb3/wgcf/releases/download/v2.2.27/wgcf_2.2.27_linux_amd64" || exit 0
+          chmod +x /tmp/wgcf
+          cd /tmp
+          ./wgcf register --accept-tos || exit 0
+          ./wgcf generate || exit 0
+          sudo apt-get update -qq && sudo apt-get install -y -qq wireguard-tools
+          # WARP 内核在部分云 VM 上不支持，超时就放弃
+          sudo timeout 40 wg-quick up /tmp/wgcf-profile.conf || echo "wg-quick 启动失败"
+          echo "WARP 出口: $(curl -sS -m 15 https://api.ipify.org)"
+          echo "===== 走 WARP 打韩站 ====="
+          curl -sS -m 25 -o /tmp/w.bin -D /tmp/w.hdr -w "HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
+            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
+          echo "ctx: $(grep -i '^poca-display' /tmp/w.hdr | tr -d '\r' | tr '\n' ' ')"
+          echo "含报价字段: $(grep -c transaction_sell_price /tmp/w.bin || echo 0)"
+          head -c 100 /tmp/w.bin; echo
+          sudo wg-quick down /tmp/wgcf-profile.conf || true
 
-            // 3) 缓存检测：同一个 id 连打 3 次
-            const a = await get(PX(HOST + "/card/v1/" + pick[0]));
-            const b = await get(PX(HOST + "/card/v1/" + pick[0]));
-            const c = await get(PX(HOST + "/card/v1/" + pick[0]));
-            console.log("同一 id 三次:", a.ms + "ms/" + a.len + "B", b.ms + "ms/" + b.len + "B", c.ms + "ms/" + c.len + "B",
-              "（时间明显递减 = 有缓存，价格会停在旧值）");
-
-            // 4) 明细接口也能过吗
-            const m = await get(PX(HOST + "/card/v1/" + pick[0] + "/matching"));
-            console.log("明细 matching: HTTP", m.s, "size", m.len, "|", m.d.replace(/\s+/g, " ").slice(0, 100));
-            const sl = await get(PX(HOST + "/card/v1/" + pick[0] + "/sell"));
-            console.log("明细 sell    : HTTP", sl.s, "size", sl.len, "|", sl.d.replace(/\s+/g, " ").slice(0, 100));
-          })();
-          '
+      - name: ② 用户态 warp-plus（SOCKS5，不需内核模块）
+        continue-on-error: true
+        run: |
+          URL=$(curl -sS -m 20 https://api.github.com/repos/bepass-org/warp-plus/releases/latest \
+            | grep -o 'https://[^"]*linux-amd64[^"]*\.zip' | head -1)
+          echo "下载: $URL"
+          [ -z "$URL" ] && exit 0
+          curl -sSL -m 90 -o /tmp/wp.zip "$URL" && cd /tmp && unzip -o -q wp.zip && ls -la /tmp/warp-plus* 2>/dev/null
+          chmod +x /tmp/warp-plus 2>/dev/null || true
+          nohup /tmp/warp-plus -b 127.0.0.1:8086 > /tmp/wp.log 2>&1 &
+          sleep 12
+          tail -6 /tmp/wp.log
+          echo "===== SOCKS5 出口 IP ====="
+          curl -sS -m 20 --socks5-hostname 127.0.0.1:8086 https://api.ipify.org || echo "socks 不通"
+          echo
+          echo "===== 走 WARP 打韩站 ====="
+          curl -sS -m 25 --socks5-hostname 127.0.0.1:8086 -o /tmp/w2.bin -D /tmp/w2.hdr \
+            -w "HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
+            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
+          echo "ctx: $(grep -i '^poca-display' /tmp/w2.hdr | tr -d '\r' | tr '\n' ' ')"
+          echo "含报价字段: $(grep -c transaction_sell_price /tmp/w2.bin || echo 0)"
+          head -c 100 /tmp/w2.bin; echo
