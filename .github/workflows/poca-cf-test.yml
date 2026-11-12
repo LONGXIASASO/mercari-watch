@@ -1,0 +1,30 @@
+name: Poca CF 中转验证
+
+# 一次性排障用 workflow：验证 Cloudflare Worker 中转出口能否拿到韩站路由。
+# 只读，不写 poca-data，不碰任何线上数据。验证完即可删除本文件。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: 拉取脚本
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 打印环境
+        run: |
+          node -v
+          echo "出口 IP: $(curl -sS -m 10 https://api.ipify.org || echo '?')"
+
+      - name: 验证 Worker 通路
+        run: node poca/_cf_check.js 'https://poca-proxy.1140382718.workers.dev' 'poca_9f3k2m7xq4wzv8hd'
