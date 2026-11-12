@@ -1,18 +1,34 @@
 name: Poca 接口探测（临时排障）
 
-# 只在需要排查时手动触发，不参与定时任务、不碰数据文件（runner 是一次性的，产物随即销毁）。
-# A/B 对照：同一个 runner 上先跑 probe5（已知能 200），再跑真正的抓取脚本，
-# 用来区分「环境/IP 问题」还是「poca.js 自己的请求有问题」。
+# 只在需要排查时手动触发，不参与定时任务、不碰数据文件。
+# 关键对照：抓取 workflow 里有 `setup-node@v4 node-version: 20`，探测 workflow 没有。
+# 如果「装 Node 20」的 job 全 404、没装的 job 全 200 → 站方在 TLS/客户端指纹层面分流。
 on:
   workflow_dispatch: {}
 
 jobs:
-  ab:
+  n20:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: 拉代码
-        uses: actions/checkout@v4
-      - name: 出口 IP + 两种 UA（对照组）
+      - uses: actions/checkout@v4
+      - name: 安装 Node 20（与抓取 workflow 完全一致）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 版本 + 探测
         continue-on-error: true
-        run: node poca/_probe6.js
+        run: |
+          node -v
+          node poca/_probe6.js
+
+  system:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: 版本 + 探测（runner 自带 node）
+        continue-on-error: true
+        run: |
+          node -v
+          node poca/_probe6.js
