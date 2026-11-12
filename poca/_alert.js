@@ -61,10 +61,10 @@ if (GATE_OK === '1' && fresh && Array.isArray(fresh.items) && fresh.items.length
   process.exit(0);
 }
 
-// ⚠️ 节流跳过（cron-job.org 和 GitHub cron 撞在一起，距上次成功不足 8 分钟）是**正常现象**，
+// ⚠️ 节流跳过（cron-job.org 和 GitHub cron 撞在一起，距上次成功不足 5 分钟）是**正常现象**，
 //    不是异常。预检失败时也会置 SKIP=1，所以必须同时看 GATE_OK=='1' 才能区分。
 if (GATE_OK === '1' && SKIP === '1') {
-  console.log('⏭ 本轮被 --min-gap 节流跳过（距上次成功不足 8 分钟），属于正常现象，不告警');
+  console.log('⏭ 本轮被 --min-gap 节流跳过（距上次成功不足 5 分钟），属于正常现象，不告警');
   process.exit(0);
 }
 
