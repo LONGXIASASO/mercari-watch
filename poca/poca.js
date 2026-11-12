@@ -27,9 +27,21 @@ const HERE = __dirname;
 //    只有 api.pocamarket.com/card/gb/v2/* 还是活的，但那是全球站：同一批卡、美元重新定价，
 //    有 ~$5.6 价格地板，KRW/USD 比值散在 89~649，不能顶替韩元，别用。
 //    主站无需鉴权，连发 20 次搜索 + 并发 12 明细全 200，无限速。
+// 🚨🚨 2026-11-12 第三次事故：站方改成**按 User-Agent 分流**。
+//    同一个 URL、同一个出口 IP、同一条 h2 连接，只换 UA 头：
+//      User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)        → 200 正常 JSON
+//      User-Agent: Mozilla/5.0 ... Chrome/131 Mobile Safari   → 404 {"success":false,"message":"NOT_FOUND"}（39 字节）
+//    连 `/` 首页都 404，所以现象长得像「整站宕机 / 域名迁移」，其实是**不认浏览器 UA 了**。
+//    09:10 起连续挂了 2 小时、20+ 轮，就是这么来的 —— 之前一直用浏览器 UA。
+//    判据：39 字节 NOT_FOUND + 换个 UA 就 200 ⇒ 改 UA，别再折腾 HOST / 传输层 / IP。
+//    实测（2026-11-12 11:10）app UA 下 5 个接口全 200：
+//      /card/v3/search、/card/v1/<id>、/card/v1/<id>/sell|buy|matching
+//    可用 POCA_UA 覆盖，留作下次站方又换规矩时的应急口。
 const HOST = 'phocamarket.com';
 
-const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+const UA_APP = 'PocaMarket/2.7.4 (iPhone; iOS 18.0)';
+const UA_WEB = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+let UA = process.env.POCA_UA || UA_APP;
 const Q = process.env.POCA_Q || '장하오';
 // 额外固定监控的卡：不在关键词搜索结果里，也要跟主列表一起抓、一起算涨跌、一起推送。
 // 436791 = RICKY · NEVER SAY NEVER 메이크스타（2026-01-12 特典）
@@ -376,6 +388,12 @@ async function getJson(p, tries = 4) {
   if (TRANSPORT === 'http1') {
     TRANSPORT = 'curl';
     console.log('  ⚠️ http1 连续 ' + tries + ' 次拿不到 ' + why + '，传输层降级为 curl 重试');
+    return getJson(p, tries);
+  }
+  // 最后一档：UA 也换一次（站方按 UA 分流，见文件头 2026-11-12 注释）
+  if (UA !== UA_WEB) {
+    UA = UA_WEB;
+    console.log('  ⚠️ app UA 全败 ' + why + '，改用浏览器 UA 再试一轮');
     return getJson(p, tries);
   }
   global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
