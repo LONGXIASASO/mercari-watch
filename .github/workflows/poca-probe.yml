@@ -1,14 +1,9 @@
-name: Poca 出口替代探测（排障用，手动触发）
+name: Poca 中转吞吐测试（手动）
 
-# 2026-11-12 13:31 起的故障：站方按**来源 IP 归属地区**分流，GitHub 机房（Azure 美国）
-# 被划到国际站那侧，而国际站后端没有 /card/v3 路由 → 整站 404 NOT_FOUND。
-#    #2431 40.76.117.227 → 200      #2432 4.249.22.2   → 200
-#    #2433 68.220.61.181 → 404      #2434 52.183.219.66 → 404
-#    #2435 20.169.68.242 → 404      #2436 20.14.214.53  → 404
-# 已排除：GeoDNS、网络封禁（同 runner 访问全球站 200）、请求头伪装（8 种组合全 404）、IPv6。
-# 本探测只做两件事：
-#   ① 有没有免费中转能让请求从别的地区出去（有 → Actions 立刻复活，零成本）
-#   ② 全球站详情里有没有韩元原值（有 → 换数据源也不破坏历史韩元价）
+# 上一轮探测结论：GitHub runner（Azure 美国，出口 172.174.166.196）直连韩站 404/39，
+# 但走 api.allorigins.win 中转 → HTTP 200 / 7670 字节 / 含 transaction_sell_price。
+# 说明站方判的是**出口 IP 归属地区**，换一条出口就通。
+# 本轮验证：这个免费中转能扛多少请求、有无缓存、延迟多少 —— 决定能不能直接接管 Actions。
 on:
   workflow_dispatch: {}
 
@@ -21,70 +16,67 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 基线（确认这轮 runner 仍是 404）
+      - name: 中转吞吐与缓存测试
         run: |
-          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          echo "出口 IP: $(curl -sS -m 12 https://api.ipify.org)"
-          printf '直连搜索  '
-          curl -sS -m 20 -o /tmp/base.bin -D /tmp/base.hdr -w "HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: $UA" -H "Accept: application/json" "$U" || true
-          echo "ctx: $(grep -i '^poca-display' /tmp/base.hdr | tr -d '\r' | tr '\n' ' ')"
-
-      # 关键测试：如果某个免费中转的服务器不在美国，请求就会走对后端。
-      # 判据：HTTP 200 且 body 里含 transaction_sell_price。
-      - name: ① 免费中转能不能穿透
-        continue-on-error: true
-        run: |
-          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          ENC=$(node -e "console.log(encodeURIComponent('$U'))")
-          t() {
-            local name="$1"; local url="$2"; shift 2
-            printf '%-22s ' "$name"
-            code=$(curl -sS -m 28 -o /tmp/p.bin -w '%{http_code}' -H "User-Agent: $UA" "$@" "$url" 2>/dev/null || echo ERR)
-            sz=$(wc -c < /tmp/p.bin 2>/dev/null | tr -d ' ')
-            hit=$(grep -c 'transaction_sell_price' /tmp/p.bin 2>/dev/null || echo 0)
-            printf 'HTTP %-4s size=%-7s 含报价字段=%s | %s\n' "$code" "$sz" "$hit" "$(head -c 60 /tmp/p.bin | tr -d '\n' | tr -d '\r')"
+          node -e '
+          const HOST = "https://phocamarket.com";
+          const PX = u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u);
+          const UA = "PocaMarket/2.7.4 (iPhone; iOS 18.0)";
+          const sleep = ms => new Promise(z => setTimeout(z, ms));
+          async function get(u, timeout = 30000) {
+            const c = new AbortController();
+            const t = setTimeout(() => c.abort(), timeout);
+            const t0 = Date.now();
+            try {
+              const r = await fetch(u, { signal: c.signal, headers: { "User-Agent": UA, "Accept": "application/json" } });
+              const d = await r.text();
+              return { s: r.status, len: d.length, ms: Date.now() - t0, d };
+            } catch (e) { return { s: 0, len: 0, ms: Date.now() - t0, d: "", err: e.name }; }
+            finally { clearTimeout(t); }
           }
-          t "allorigins"  "https://api.allorigins.win/raw?url=$ENC"
-          t "codetabs"    "https://api.codetabs.com/v1/proxy?quest=$U"
-          t "corsproxy.io" "https://corsproxy.io/?url=$ENC"
-          t "cors.lol"    "https://api.cors.lol/?url=$ENC"
-          t "thingproxy"  "https://thingproxy.freeboard.io/fetch/$U"
-          t "jina.ai"     "https://r.jina.ai/$U"
-          t "corsfix"     "https://proxy.corsfix.com/?$U"
-          t "whateverorigin" "http://www.whateverorigin.org/get?url=$ENC"
+          (async () => {
+            // 1) 拿一页搜索，取 24 个 id
+            const s = await get(PX(HOST + "/card/v3/search?q=" + encodeURIComponent("장하오")));
+            console.log("搜索: HTTP", s.s, "size", s.len, "ms", s.ms);
+            let ids = [];
+            try { ids = (JSON.parse(s.d).results || []).map(r => r.id); } catch (e) { console.log("解析失败:", s.d.slice(0, 80)); }
+            console.log("拿到 id:", ids.length);
+            if (!ids.length) return;
 
-      - name: ② 全球站详情有没有韩元原值
-        continue-on-error: true
-        run: |
-          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          G='https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          curl -sS -m 25 -o /tmp/gb.json -w "全球站搜索 HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: $UA" -H "Accept: application/json" "$G" || true
-          ID=$(node -e "const j=require('/tmp/gb.json');const a=(j.data&&j.data.results)||[];console.log(a[0]&&a[0].id||'')" 2>/dev/null)
-          echo "样本 id=$ID"
-          node -e "
-          const j=require('/tmp/gb.json');const a=(j.data&&j.data.results)||[];const x=a[0]||{};
-          console.log('搜索字段:', Object.keys(x).join(','));
-          console.log('样本:', JSON.stringify(x).slice(0,500));
-          " 2>&1 | head -6
-          for p in "/card/gb/v1/$ID" "/card/gb/v2/$ID" "/card/v1/$ID"; do
-            printf '%-26s ' "$p"
-            curl -sS -m 20 -o /tmp/gd.bin -w "HTTP %{http_code} size=%{size_download}" \
-              -H "User-Agent: $UA" -H "Accept: application/json" "https://api.pocamarket.com$p" || true
-            echo " | $(head -c 90 /tmp/gd.bin | tr -d '\n')"
-          done
-          echo "----- 详情里出现的货币/价格字段 -----"
-          node -e "
-          const fs=require('fs');
-          const t=fs.readFileSync('/tmp/gd.bin','utf8');
-          try{ const j=JSON.parse(t); const d=j.data||j;
-            const keys=[]; (function walk(o,pf){ if(!o||typeof o!=='object')return;
-              for(const k of Object.keys(o)){ const v=o[k];
-                if(/price|currency|krw|usd|amount/i.test(k)) keys.push(pf+k+'='+JSON.stringify(v).slice(0,40));
-                else if(v&&typeof v==='object') walk(v,pf+k+'.'); } })(d,'');
-            console.log(keys.slice(0,40).join('\n')||'(没找到价格字段)');
-          }catch(e){ console.log('解析失败:',e.message); }
-          "
+            // 2) 详情接口连打（并发 4），统计成功率与延迟
+            const pick = ids.slice(0, 24);
+            for (const conc of [4, 8]) {
+              let ok = 0, bad = 0, ms = [], codes = {};
+              let i = 0;
+              const t0 = Date.now();
+              async function w() {
+                while (i < pick.length) {
+                  const id = pick[i++];
+                  const r = await get(PX(HOST + "/card/v1/" + id));
+                  codes[r.s] = (codes[r.s] || 0) + 1;
+                  if (r.s === 200 && r.d.trim().startsWith("{")) { ok++; ms.push(r.ms); } else bad++;
+                }
+              }
+              await Promise.all(Array.from({ length: conc }, w));
+              const total = (Date.now() - t0) / 1000;
+              const avg = ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length) : 0;
+              const mx = ms.length ? Math.max(...ms) : 0;
+              console.log(`并发${conc}: ${pick.length} 个详情 | 成功 ${ok} 失败 ${bad} | 状态码 ${JSON.stringify(codes)} | 平均 ${avg}ms 最慢 ${mx}ms | 总耗时 ${total.toFixed(1)}s`);
+              console.log(`  → 推算 1036 张详情约需 ${Math.round(1036 / pick.length * total)}s`);
+              await sleep(1500);
+            }
+
+            // 3) 缓存检测：同一个 id 连打 3 次
+            const a = await get(PX(HOST + "/card/v1/" + pick[0]));
+            const b = await get(PX(HOST + "/card/v1/" + pick[0]));
+            const c = await get(PX(HOST + "/card/v1/" + pick[0]));
+            console.log("同一 id 三次:", a.ms + "ms/" + a.len + "B", b.ms + "ms/" + b.len + "B", c.ms + "ms/" + c.len + "B",
+              "（时间明显递减 = 有缓存，价格会停在旧值）");
+
+            // 4) 明细接口也能过吗
+            const m = await get(PX(HOST + "/card/v1/" + pick[0] + "/matching"));
+            console.log("明细 matching: HTTP", m.s, "size", m.len, "|", m.d.replace(/\s+/g, " ").slice(0, 100));
+            const sl = await get(PX(HOST + "/card/v1/" + pick[0] + "/sell"));
+            console.log("明细 sell    : HTTP", sl.s, "size", sl.len, "|", sl.d.replace(/\s+/g, " ").slice(0, 100));
+          })();
+          '
