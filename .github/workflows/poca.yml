@@ -193,6 +193,27 @@ jobs:
             echo "SKIP=1" >> "$GITHUB_ENV"
           fi
 
+          # 批量端点单独验一次：这是我们自己的代码，坏了必须吵，不能静默跳过
+          # （Worker 里还没粘贴新版就会 404，那是配置没跟上，不是站方问题）
+          # 故意用 20 个路径探 —— 和实际批大小一致，顺便验 Worker 扛不扛得住 20 个子请求
+          if [ "$CODE" = "200" ] && [ "$SIZE" -gt 500 ]; then
+            ARR=""
+            for i in $(seq 1 20); do
+              if [ -z "$ARR" ]; then ARR='"/card/v1/436791"'; else ARR="$ARR,\"/card/v1/436791\""; fi
+            done
+            BCODE=$(curl -sS -m 40 -o /tmp/gate_b.bin -w '%{http_code}' \
+              -X POST -H 'Content-Type: application/json' \
+              -H 'x-poca-key: poca_9f3k2m7xq4wzv8hd' \
+              -d "{\"ps\":[$ARR]}" \
+              'https://poca-proxy.1140382718.workers.dev/__batch' || echo 000)
+            echo "批量端点(20路) HTTP $BCODE 大小 $(stat -c%s /tmp/gate_b.bin 2>/dev/null || echo 0)"
+            echo "   体: $(head -c 160 /tmp/gate_b.bin 2>/dev/null)"
+            if [ "$BCODE" != "200" ] || ! grep -q '"r"' /tmp/gate_b.bin 2>/dev/null; then
+              echo "::error::批量端点 /__batch 不可用（HTTP $BCODE）—— Cloudflare Worker 需要重新粘贴带批量端点的代码"
+              exit 1
+            fi
+          fi
+
       - name: 抓取 Poca
         if: steps.gate.outputs.ok == '1'
         env:
@@ -201,19 +222,20 @@ jobs:
           # 走 Cloudflare Worker 中转，绕开 Azure 机房 IP 被判「国际站」
           POCA_HOST: poca-proxy.1140382718.workers.dev
           POCA_KEY: poca_9f3k2m7xq4wzv8hd
+          # 批量：一次 Worker 请求取 20 个接口 → 配额按批算，不按接口算
+          POCA_BATCH: '20'
+          POCA_BATCH_CONC: '2'     # 同时在飞的批数 → 等效上游并发 40
         run: |
-          # ⚠️⚠️ Cloudflare 免费版每天 10 万次请求，是这套方案唯一的硬约束。
-          #    2026-11-12 16:30 起把「搜索」和「详情」彻底拆开：
-          #      · 搜索（匹配最低价 p / 速切最低价 q + 涨跌检测）—— 页面主价格就靠它，
-          #        每 10 分钟一轮，一轮只有 68 个请求。
-          #      · 详情+明细（最高求购 / 最近成交 / 库存件数 / 挂单成交记录）—— 2426 请求一轮，
-          #        由脚本内部按 POCA_DEEP_GAP 判断，约 55 分钟才真跑一次。
-          #    所以这里每轮都传 --fast，脚本自己决定要不要升级成完整抓取。
-          #    预算：144 轮 × 68 + 24 轮 × 2426 ≈ 6.8 万/天，留 32% 余量。
+          # ✅ 2026-11-12 17:00 起：批量取把配额消耗降了 13 倍，**每轮全量，不再降频**。
+          #    一轮 = 搜索 65 + 固定卡 3 + 详情 52 + 明细 67 ≈ 187 次 Worker 请求
+          #    （2026 个上游接口调用被压进 119 次 Worker 请求里）。
+          #    10 分钟一轮跑满一天 = 144 × 187 ≈ 2.7 万，免费额度 10 万里余量七成。
+          #    --fast / POCA_DEEP_GAP 那套「快跑轮+每小时完整轮」的分工已经全部删掉。
+          #    --min-gap 8 只用来挡 cron-job.org 和 GitHub schedule 撞在一起的重复触发。
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
-            node poca/poca.js --min-gap 8 --fast --skip-wish
+            node poca/poca.js --min-gap 8 --skip-wish
           else
-            node poca/poca.js --min-gap 8 --fast
+            node poca/poca.js --min-gap 8
           fi
 
       - name: 确认产物
