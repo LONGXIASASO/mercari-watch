@@ -50,6 +50,18 @@ const HOST = process.env.POCA_HOST || 'phocamarket.com';
 const KEY = process.env.POCA_KEY || '';
 const KHDR = KEY ? { 'x-poca-key': KEY } : {};
 
+// ── 批量取（2026-11-12 17:00）──
+// 🚨 配额账：Cloudflare 免费版每天 10 万，是按「Worker 请求次数」算的，**不是按上游接口次数**。
+//    一对一取的话一轮 2426 次，10 分钟一轮就要 34.9 万/天，根本塞不进去；
+//    一次请求取 20 个接口，一轮降到 68+52+67=187 次，10 分钟全量跑一天只要 2.7 万，余量七成。
+//    ⇒ 从此不需要再为了省配额降频，搜索/详情/明细全部恢复每轮全量。
+//    POCA_BATCH=0 可关掉批量（退回一对一），POCA_BATCH 调批大小（上限 40 = Worker 子请求上限内）。
+const BATCH = Math.max(1, Math.min(40, Number(process.env.POCA_BATCH) || 20));
+// 只有走中转时才批量：直连站方没有 /__batch 这个端点，硬发就是 404
+const USE_BATCH = !!process.env.POCA_HOST && String(process.env.POCA_BATCH) !== '0';
+const BATCH_CONC = Math.max(1, Math.min(8, Number(process.env.POCA_BATCH_CONC) || 2));
+// 等效上游并发 = BATCH_CONC × BATCH = 2×20 = 40（原来 h2 是 16~20，实测 0 失败）
+
 const UA_APP = 'PocaMarket/2.7.4 (iPhone; iOS 18.0)';
 const UA_WEB = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 let UA = process.env.POCA_UA || UA_APP;
@@ -262,13 +274,12 @@ const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢
 //   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
 //   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
 const SKIP_DETAIL = process.argv.includes('--skip-detail');
-// --fast：快跑轮，只更新搜索价（匹配最低价 p / 速切最低价 q）。详情和明细默认不走，
-//   但距上次完整抓取超过 POCA_DEEP_GAP（默认 55 分钟）会自动升级成完整抓取 —— 这样
-//   即使 workflow 的触发时刻被 cron-job.org 和 cron 撞得漂移，详情也不会被饿死。
-const FAST = process.argv.includes('--fast');
+// --fast：已废弃（2026-11-12 17:00）。批量取把配额降了 13 倍后，快跑轮/完整轮的分工没有存在意义，
+//   每轮都全量。参数仍被接受但不再产生任何效果，避免旧 workflow 缓存里带着它时行为不可预期。
+const FAST = process.argv.includes('--fast');   // 仅为兼容保留，见上面注释
 // 上一轮 data.json（workflow 从 poca-data 拉到 poca/data.prev.json）
-let PREV_DET = {};    // 明细：挂单/成交行，含「仍在挂」标记，快跑轮原样沿用
-let PREV_ITEMS = {};  // 整卡：快跑轮兜底库存件数（搜索只给 is_stocked 布尔，会退化成「库 1」）
+let PREV_DET = {};    // 明细：挂单/成交行，含「仍在挂」标记，--skip-detail 时原样沿用
+let PREV_ITEMS = {};  // 整卡：--skip-detail 时兜底库存件数（搜索只给 is_stocked 布尔，会退化成「库 1」）
 const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足这么多分钟就跳过
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -371,6 +382,30 @@ function rawGetNode(p, timeout = 25000) {
     req.end();
   });
 }
+// 批量请求走 POST：h2 的 rawGetH2 只实现 GET，且这里目标一定是 Worker（不需要绕 TLS 指纹那关），
+// 所以直接 https.request 就够，不必再套一层 http2。
+function rawPost(p, obj, timeout = 60000) {
+  return new Promise(resolve => {
+    const body = JSON.stringify(obj);
+    const req = https.request({
+      host: HOST, path: p, method: 'POST', timeout,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...KHDR,
+      },
+    }, res => {
+      let d = '';
+      res.setEncoding('utf8');
+      res.on('data', c => { d += c; });
+      res.on('end', () => resolve({ s: res.statusCode, d }));
+    });
+    req.on('error', () => resolve({ s: 0, d: '' }));
+    req.on('timeout', () => { req.destroy(); resolve({ s: -1, d: '' }); });
+    req.write(body);
+    req.end();
+  });
+}
 function rawGet(p, timeout = 25000) {
   if (TRANSPORT === 'h2') return rawGetH2(p, timeout);
   if (TRANSPORT === 'curl') return rawGetCurl(p);
@@ -410,6 +445,59 @@ async function getJson(p, tries = 3) {
   //        「整轮失败」只由搜索首页判定，不在每个请求上纠缠。
   global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
   return null;
+}
+
+// ── 批量取一批路径，返回与 paths 等长、顺序一致的数组；取不到的位是 null ──
+// 走中转：每 BATCH 个路径打一次 Worker，Worker 内部并发全部上游；
+// 直连：退化成单请求并发（等价于原来的 fetchDetails 写法，行为不变）。
+async function getMany(paths, conc) {
+  const out = new Array(paths.length).fill(null);
+  if (!paths.length) return out;
+  const B = USE_BATCH ? BATCH : 1;
+  const chunks = [];
+  for (let off = 0; off < paths.length; off += B) {
+    const c = [];
+    for (let k = off; k < Math.min(off + B, paths.length); k++) c.push(k);
+    chunks.push(c);
+  }
+  let ci = 0, batchFail = 0;
+  async function w() {
+    for (;;) {
+      const ch = chunks[ci++];
+      if (!ch) return;
+      if (!USE_BATCH) {
+        for (const i of ch) out[i] = await getJson(paths[i], 2);
+        continue;
+      }
+      let j = null;
+      for (let t = 0; t < 2; t++) {
+        const r = await rawPost('/__batch', { ps: ch.map(i => paths[i]) });
+        if (r.s === 200 && r.d) { try { j = JSON.parse(r.d); } catch (e) {} }
+        if (j && Array.isArray(j.r)) break;
+        if (t === 0) await sleep(1500);
+      }
+      if (!j || !Array.isArray(j.r)) {
+        // 整批挂掉：这一批的位保持 null，由调用方按失败处理；不要在这里继续死磕
+        batchFail++;
+        if (batchFail <= 3) console.log('  ⚠️ 批量失败（' + (j ? '格式异常' : '无响应') + '）：' + paths[ch[0]] + ' 起 ' + ch.length + ' 个');
+        continue;
+      }
+      for (let k = 0; k < ch.length; k++) {
+        const x = j.r[k];
+        if (!x || x.s !== 200 || typeof x.d !== 'string' || !x.d) continue;
+        if (x.d.trim().charAt(0) !== '{') continue;
+        try { out[ch[k]] = JSON.parse(x.d); } catch (e) {}
+      }
+    }
+  }
+  // 并发：走中转时按「在飞批数」算（2×20=40 上游并发）；
+  // 直连时每批只有 1 个路径，得把并发拉回原来的 16，否则会退化成 2 并发。
+  const W = USE_BATCH
+    ? Math.min(conc, chunks.length)
+    : Math.min(Math.max(conc * 8, 8), chunks.length);
+  await Promise.all(Array.from({ length: W }, w));
+  if (batchFail) global.LASTGET = '批量失败 ' + batchFail + ' 批';
+  return out;
 }
 
 const num = v => { const n = Number(v); return isFinite(n) && n > 0 ? n : 0; };
@@ -485,67 +573,54 @@ const rowsOf = (o, max) => (o && Array.isArray(o.results))
 async function fetchDetails(ids) {
   const out = {};
   const pOf = {};                     // id → 匹配最低卖价，仅用于决定抓不抓明细，不落盘
-  let next = 0, fails = 0, done = 0;
+  let fails = 0;
 
-  // 阶段 1：单卡详情（1 请求/卡，并发回到 16）
-  async function w1() {
-    for (;;) {
-      const i = next++;
-      if (i >= ids.length) return;
-      const id = ids[i];
-      const j = await getJson(`/card/v1/${id}`, 2);
-      if (!j || !j.id) { fails++; }
-      else {
-        const rec = {};
-        const b = num(j.get_highest_buy_price);
-        const mp = num(j.get_matching_price);
-        const t = num(j.get_collection_transaction_price);
-        if (b > 0) rec.b = b;
-        if (mp > 0) rec.mp = mp;
-        if (t > 0) rec.t = t;
-        // 库存单独存：0 也是有效值（真的没货），不能用 num() 的 >0 过滤
-        const st = j.get_collection_count;
-        if (st !== null && st !== undefined && isFinite(Number(st))) rec.st = Math.max(0, Number(st));
-        if (Object.keys(rec).length) out[id] = rec;
-        pOf[id] = num(j.get_lowest_sell_price);
-      }
-      if (++done % 250 === 0) console.log(`  单卡详情 ${done}/${ids.length} 失败 ${fails}`);
-    }
+  // 阶段 1：单卡详情（走中转时每 20 个卡打一次 Worker，直连时退回单请求并发）
+  const js = await getMany(ids.map(id => `/card/v1/${id}`), BATCH_CONC);
+  for (let i = 0; i < ids.length; i++) {
+    const j = js[i];
+    if (!j || !j.id) { fails++; continue; }
+    const id = ids[i];
+    const rec = {};
+    const b = num(j.get_highest_buy_price);
+    const mp = num(j.get_matching_price);
+    const t = num(j.get_collection_transaction_price);
+    if (b > 0) rec.b = b;
+    if (mp > 0) rec.mp = mp;
+    if (t > 0) rec.t = t;
+    // 库存单独存：0 也是有效值（真的没货），不能用 num() 的 >0 过滤
+    const st = j.get_collection_count;
+    if (st !== null && st !== undefined && isFinite(Number(st))) rec.st = Math.max(0, Number(st));
+    if (Object.keys(rec).length) out[id] = rec;
+    pOf[id] = num(j.get_lowest_sell_price);
   }
-  await Promise.all(Array.from({ length: 16 }, w1));
   if (fails > ids.length * 0.3) throw new Error(`单卡详情失败 ${fails}/${ids.length}，放弃本次`);
 
   // 阶段 2：按需抓明细
   //   挂单 sell   → 只在 p>0 时抓（没人挂单时必定空，实测 0% 命中）
   //   成交 matching → 只在「p>0 或 有库存 或 有人求购」时抓（三者全 0 的冷门卡实测无成交）
+  // 展开成一个扁平路径数组，一次批量取完，回来再按 kind 回填。
   const jobs = [];
   for (const id of Object.keys(out)) {
     const r = out[id];
     const p = pOf[id] || 0;
     const wantSell = p > 0;
     const wantMatch = p > 0 || (r.st || 0) > 0 || (r.b || 0) > 0;
-    if (wantSell || wantMatch) jobs.push({ id, wantSell, wantMatch });
+    if (wantSell) jobs.push({ id, kind: 'sell' });
+    if (wantMatch) jobs.push({ id, kind: 'match' });
   }
-  let jn = 0, jdone = 0, jfails = 0;
-  async function w2() {
-    for (;;) {
-      const i = jn++;
-      if (i >= jobs.length) return;
-      const { id, wantSell, wantMatch } = jobs[i];
-      const [sel, mat] = await Promise.all([
-        wantSell ? getJson(`/card/v1/${id}/sell`) : null,
-        wantMatch ? getJson(`/card/v1/${id}/matching`) : null,
-      ]);
-      if (wantSell && sel === null && wantMatch && mat === null) jfails++;
-      const ds = rowsOf(sel, 20), dm = rowsOf(mat, 20);
-      // 只取有价的，空数组不落盘
-      if (ds.length) out[id].ds = ds;
-      if (dm.length) out[id].dm = dm;
-      if (++jdone % 250 === 0) console.log(`  明细 ${jdone}/${jobs.length} 失败 ${jfails}`);
-    }
+  const jres = await getMany(jobs.map(x => `/card/v1/${x.id}/${x.kind === 'sell' ? 'sell' : 'matching'}`), BATCH_CONC);
+  let jfails = 0;
+  for (let i = 0; i < jobs.length; i++) {
+    const o = jres[i];
+    if (o === null) { jfails++; continue; }
+    const { id, kind } = jobs[i];
+    const rows = rowsOf(o, 20);
+    if (!rows.length) continue;          // 只取有价的，空数组不落盘
+    if (kind === 'sell') out[id].ds = rows;
+    else out[id].dm = rows;
   }
-  await Promise.all(Array.from({ length: CONC_DETAIL() }, w2));
-  const nSell = jobs.filter(j => j.wantSell).length, nMat = jobs.filter(j => j.wantMatch).length;
+  const nSell = jobs.filter(j => j.kind === 'sell').length, nMat = jobs.length - nSell;
   console.log(`  按需明细：挂单 ${nSell} 张 / 成交 ${nMat} 张（跳过 ${ids.length - nSell} 张挂单、${ids.length - nMat} 张成交），失败 ${jfails}`);
   return out;
 }
@@ -715,30 +790,16 @@ const KIND_KR2EN = {
     console.log(`收藏排名完成 ${wishRank.size} 条（按 wish_count 自算）`);
   }
 
-  // 3) 详情 + 明细（每卡 1 请求拿求购/成交/库存件数，再按需补挂单成交明细）
+  // 3) 详情 + 明细（每卡 1 接口拿求购/成交/库存件数，再按需补挂单成交明细）
   //
-  // ⚠️ 2026-11-12 16:30 重构：搜索和详情彻底解耦。
-  //    页面卡片上两个主价格「匹配 / 速切」用的是**搜索接口**的 transaction_sell_price /
-  //    offer_price（前端绑 x.p / x.q），涨跌检测也基于这两个值 —— 也就是说
-  //    「价格 10 分钟一更」完全不需要详情。
-  //    详情只提供四样：最高求购 b、最近匹配成交 mp、速切最近成交 t、库存件数 st。
-  //    ⇒ 快跑轮（--fast）只跑搜索（68 请求），详情+明细压到约一小时一次（2426 请求）。
-  //      10 分钟快跑 144 轮 + 每小时 1 次完整 = 约 6.8 万请求/天，留在 10 万免费额度内。
+  // 2026-11-12 17:00：改批量之后**配额不再是瓶颈**，所以 16:30 那套「快跑轮 / 完整轮」分工全部退场，
+  //    每轮都全量：一轮 = 搜索 65 + 固定卡 3 + 详情 ⌈1036/20⌉=52 + 明细 ⌈1322/20⌉=67 ≈ 187 次 Worker 请求。
+  //    10 分钟一轮跑满一天 = 144 × 187 ≈ 2.7 万，免费额度 10 万里还剩七成。
+  //    （旧方案一对一是 2426 次/轮，10 万只够 40 轮/天，才被迫降频+分期。）
   const ids = main.list.map(r => r.id);
+  const useDetail = !SKIP_DETAIL;
 
-  const DEEP_GAP = Number(process.env.POCA_DEEP_GAP || 55);
-  let doDeep = true;
-  if (FAST) {
-    const last = prevState.deepAt ? new Date(prevState.deepAt).getTime() : 0;
-    const age = last ? (Date.now() - last) / 60000 : 1e9;
-    doDeep = age >= DEEP_GAP;
-    console.log(doDeep
-      ? `快跑轮 → 距上次完整抓取 ${age > 1e8 ? '未知' : Math.round(age) + ' 分钟'} ≥ ${DEEP_GAP}，本轮升级为完整抓取`
-      : `快跑轮 → 距上次完整抓取 ${Math.round(age)} 分钟 < ${DEEP_GAP}，只更新匹配/速切价（详情明细沿用上一轮）`);
-  }
-  const useDetail = doDeep && !SKIP_DETAIL;
-
-  // 需要沿用上一轮产物时，把整份 data.prev.json 读进来
+  // --skip-detail 仍保留（临时排障用）；触发时沿用上一轮 data.json 的记录，标记不变
   if (!useDetail) {
     try {
       const p = path.join(HERE, 'data.prev.json');
@@ -757,7 +818,7 @@ const KIND_KR2EN = {
 
   const detail = useDetail ? await fetchDetails(ids) : {};
   if (!useDetail) {
-    console.log(`详情+明细跳过（省约 2350 请求）；沿用上一轮 ${Object.keys(PREV_ITEMS).length} 张卡的求购/成交/库存/挂单记录`);
+    console.log(`详情+明细跳过（--skip-detail）；沿用上一轮 ${Object.keys(PREV_ITEMS).length} 张卡的求购/成交/库存/挂单记录`);
   } else {
     console.log(`详情+明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
   }
