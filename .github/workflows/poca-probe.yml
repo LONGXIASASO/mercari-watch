@@ -1,69 +1,71 @@
 name: Poca 出口改道测试（手动）
 
-# 已知：GitHub runner（Azure 美国）被韩站分流到国际站后端 → 整站 404/39。
-# 已知：jina.ai（跑在 Cloudflare 上）能拿到韩站数据 → Cloudflare 网络出口通行。
-# 本轮：在 Actions 内把出站转到 Cloudflare WARP，看出口 IP 变了能否 200。
-# ⚠️ 上一版用 nohup 起 warp-plus 把 job 挂死（后台进程占住 stdout），改成全程 timeout 包裹 + 前台运行。
+# 已证实：GitHub runner（Azure 美国）→ 韩站 404/39，是**出口地区**问题，跟代码无关。
+# 已排除：WARP 隧道（出口 104.28.227.106 建连成功，但访问韩站 25s 超时——韩站封了 WARP 网段）。
+# 已证实：jina.ai（跑在 Cloudflare Workers 上）能取到韩站 JSON → **CF 边缘出口是通的**。
+# 本轮：测几个跑在 Cloudflare 上的公共 CORS 代理。任一稳定可用 → Actions 立刻复活，你不用做任何事。
 on:
   workflow_dispatch: {}
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: 基线
+      - name: 公共 CF 代理穿透测试
         run: |
-          echo "当前出口: $(curl -sS -m 12 https://api.ipify.org)"
-          curl -sS -m 20 -o /dev/null -w "直连韩站 HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
-            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
+          node -e '
+          const U = "https://phocamarket.com/card/v3/search?q=" + encodeURIComponent("장하오");
+          const UA = "PocaMarket/2.7.4 (iPhone; iOS 18.0)";
+          const enc = encodeURIComponent(U);
+          const cands = [
+            ["test.cors.workers.dev", "https://test.cors.workers.dev/?" + U],
+            ["cors.eu.org",           "https://cors.eu.org/" + U],
+            ["cors.isomorphic-git",   "https://cors.isomorphic-git.org/" + U],
+            ["allorigins",            "https://api.allorigins.win/raw?url=" + enc],
+            ["corsproxy.garmeeh",     "https://corsproxy.garmeeh.workers.dev/?" + U],
+            ["cf-cors-proxy",         "https://cors-proxy.deno.dev/?" + U],
+            ["yacdn",                 "https://yacdn.org/proxy/" + U],
+          ];
+          (async () => {
+            for (const [name, url] of cands) {
+              const t0 = Date.now();
+              const c = new AbortController();
+              const to = setTimeout(() => c.abort(), 25000);
+              try {
+                const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": UA, Accept: "application/json" } });
+                const d = await r.text();
+                const hit = d.includes("transaction_sell_price");
+                console.log(
+                  (hit ? "✅" : "  "), name.padEnd(22),
+                  "HTTP", String(r.status).padEnd(4),
+                  "size=" + String(d.length).padEnd(7),
+                  "报价字段=" + (hit ? "有" : "无"),
+                  (Date.now() - t0) + "ms",
+                  hit ? "" : "| " + d.replace(/\s+/g, " ").slice(0, 70)
+                );
+              } catch (e) {
+                console.log("  ", name.padEnd(22), "失败", e.name, (Date.now() - t0) + "ms");
+              } finally { clearTimeout(to); }
+            }
 
-      - name: 原生 WARP（wgcf + wg-quick）
-        continue-on-error: true
-        run: |
-          cd /tmp
-          timeout 70 curl -sSL -o wgcf "https://github.com/ViRb3/wgcf/releases/download/v2.2.27/wgcf_2.2.27_linux_amd64" || { echo "wgcf 下载失败"; exit 0; }
-          chmod +x wgcf
-          tail -c 200 wgcf | head -c 100; echo
-          timeout 40 ./wgcf register --accept-tos || { echo "注册失败"; exit 0; }
-          timeout 30 ./wgcf generate || { echo "生成失败"; exit 0; }
-          echo "=== 配置已生成 ==="
-          sudo apt-get update -qq 2>/dev/null; sudo apt-get install -y -qq wireguard-tools 2>/dev/null
-          sudo timeout 45 wg-quick up /tmp/wgcf-profile.conf || echo "wg-quick 启动失败（内核模块不可用）"
-          echo "WARP 出口: $(curl -sS -m 15 https://api.ipify.org)"
-          echo "===== 走 WARP 打韩站 ====="
-          curl -sS -m 25 -o /tmp/w.bin -D /tmp/w.hdr -w "HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
-            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
-          echo "ctx: $(grep -i '^poca-display' /tmp/w.hdr | tr -d '\r' | tr '\n' ' ')"
-          echo "含报价字段: $(grep -c transaction_sell_price /tmp/w.bin || echo 0)"
-          head -c 100 /tmp/w.bin; echo
-          sudo timeout 30 wg-quick down /tmp/wgcf-profile.conf || true
-
-      - name: 用户态 warp-plus（SOCKS5，前台限时）
-        continue-on-error: true
-        run: |
-          cd /tmp
-          URL=$(echo "https://github.com/bepass-org/warp-plus/releases/download/v1.2.12/warp-plus_linux-amd64.zip")
-          echo "下载: $URL"
-          timeout 80 curl -sSL -o wp.zip "$URL" || { echo "下载失败"; exit 0; }
-          unzip -o -q wp.zip && ls -la warp-plus 2>/dev/null || { echo "解压失败"; exit 0; }
-          chmod +x warp-plus
-          # 前台起代理，放到后台但立刻 disown 输出，避免挂住 job
-          timeout 60 ./warp-plus -b 127.0.0.1:8086 > wp.log 2>&1 &
-          WPPID=$!
-          sleep 20
-          tail -8 wp.log
-          echo "===== SOCKS5 出口 IP ====="
-          curl -sS -m 20 --socks5-hostname 127.0.0.1:8086 https://api.ipify.org || echo "  socks 不通"
-          echo
-          echo "===== 走 SOCKS5 打韩站 ====="
-          curl -sS -m 25 --socks5-hostname 127.0.0.1:8086 -o w2.bin -D w2.hdr \
-            -w "HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)" -H "Accept: application/json" \
-            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
-          echo "ctx: $(grep -i '^poca-display' w2.hdr | tr -d '\r' | tr '\n' ' ')"
-          echo "含报价字段: $(grep -c transaction_sell_price w2.bin || echo 0)"
-          head -c 100 w2.bin; echo
-          kill $WPPID 2>/dev/null || true
+            // 稳的那个再连打 8 次，看会不会 429 / 有没有缓存
+            console.log("\n===== 连打 8 次（看稳定性与缓存）=====");
+            const target = "https://test.cors.workers.dev/?" + U;
+            const times = [], lens = [];
+            for (let i = 0; i < 8; i++) {
+              const t0 = Date.now();
+              const c = new AbortController();
+              const to = setTimeout(() => c.abort(), 20000);
+              try {
+                const r = await fetch(target, { signal: c.signal, headers: { "User-Agent": UA } });
+                const d = await r.text();
+                times.push(Date.now() - t0); lens.push(d.length);
+                process.stdout.write(r.status + "(" + d.length + "B," + (Date.now() - t0) + "ms) ");
+              } catch (e) { process.stdout.write("ERR(" + e.name + ") "); }
+              finally { clearTimeout(to); }
+              await new Promise(z => setTimeout(z, 400));
+            }
+            console.log("\n长度是否恒定:", new Set(lens).size === 1 ? "恒定（可能有缓存）" : "变化（实时）");
+          })();
+          '
