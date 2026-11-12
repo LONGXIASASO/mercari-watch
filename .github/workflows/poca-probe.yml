@@ -1,24 +1,16 @@
 name: Poca 接口探测（排障用，手动触发）
 
-# 卡市抓取失败时，先跑这个，再动 poca.js / poca.yml。
-# 只手动触发（workflow_dispatch），不参与定时任务、不写 poca-data、不碰任何数据文件。
-#
-# ===== 2026-11-12 13:31 起故障的已知事实 =====
-# 1) 出口 IP 与结果强相关（同一份代码、同 Node22、同 App UA）：
-#      #2431 40.76.117.227 → 200     #2432 4.249.22.2   → 200
-#      #2433 68.220.61.181 → 404     #2434 52.183.219.66 → 404
-#      #2435 20.169.68.242 → 404     #2436 20.14.214.53  → 404
-#    本地（中国出口）同一 URL → 200，首页 32982 字节。
-# 2) 不是 GeoDNS：runner 上 DNS 解析结果就是真实源站 15.165.183.28 / 52.79.215.134，
-#    强制 --resolve 到任一台都 404。
-# 3) 不是网络层封禁：同一 runner 上 api.pocamarket.com 全球站 200（3.39.175.195）。
-# 4) 404 响应头暴露了分流依据：
-#      poca-display-language: en        ← runner 被判成英文区
-#      poca-display-currency: USD
-#      vary: POCA-LANGUAGE, POCA-CURRENCY, Cookie, origin
-#    本地成功时是 poca-display-language: zh-CN / currency: CNY。
-#    ⇒ 站方按来源地区决定 context，en/USD context 下 /card/v3/search 没有路由。
-# 5) 所以本探测的目标：**能不能用请求头把它强制拉回韩国上下文**。
+# 2026-11-12 13:31 起的故障：站方按**来源 IP 归属地区**分流。
+#   同一份代码 / 同 Node22 / 同 App UA：
+#     #2431 40.76.117.227 → 200      #2432 4.249.22.2   → 200
+#     #2433 68.220.61.181 → 404      #2434 52.183.219.66 → 404
+#     #2435 20.169.68.242 → 404      #2436 20.14.214.53  → 404
+#   本地（中国出口）同一 URL → 200，首页 32982 字节。
+# 已排除：GeoDNS（runner 解析到的是真实源站，强制 --resolve 两台都 404）、
+#         网络封禁（同 runner 上 api.pocamarket.com 全球站 200）、
+#         请求头伪装（POCA-LANGUAGE/POCA-CURRENCY/Cookie/XFF 八种组合全 404，
+#         响应头 poca-display-language 恒为 en、currency 恒为 USD）。
+# 本探测找**替代出口/替代数据源**，不再纠缠请求特征。
 on:
   workflow_dispatch: {}
 
@@ -32,82 +24,61 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 上下文伪装矩阵（核心）
+      - name: IPv6 出站（换一条源 IP）
         continue-on-error: true
         run: |
           UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
           U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          echo "出口 IP: $(curl -sS -m 15 https://api.ipify.org)"; echo
-          run_case() {
-            local name="$1"; shift
-            local out
-            out=$(curl -sS -m 20 -o /tmp/c.bin -D /tmp/c.hdr -w "%{http_code} %{size_download}" \
-              -H "User-Agent: $UA" -H "Accept: application/json" "$@" "$U" || echo "000 0")
-            local cur lang
-            cur=$(grep -i '^poca-display-currency' /tmp/c.hdr | tr -d '\r' | awk '{print $2}')
-            lang=$(grep -i '^poca-display-language' /tmp/c.hdr | tr -d '\r' | awk '{print $2}')
-            printf '%-46s %-12s ctx=%s/%s\n' "$name" "$out" "${lang:-?}" "${cur:-?}"
-          }
-          run_case "① 基线（现有请求头）" \
-            -H "Accept-Language: ko-KR,ko;q=0.9" -H "POCA-DISPLAY-LANGUAGE: ko" -H "Referer: https://pocamarket.com/"
-          run_case "② + POCA-LANGUAGE: ko" \
-            -H "POCA-LANGUAGE: ko"
-          run_case "③ + POCA-CURRENCY: KRW" \
-            -H "POCA-CURRENCY: KRW"
-          run_case "④ + 两者都要" \
-            -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW"
-          run_case "⑤ + 两者 + Origin" \
-            -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW" -H "Origin: https://phocamarket.com"
-          run_case "⑥ + Cookie lang=ko" \
-            -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW" -H "Cookie: language=ko; currency=KRW"
-          run_case "⑦ + X-Forwarded-For 韩国 IP" \
-            -H "X-Forwarded-For: 121.78.0.1" -H "X-Real-IP: 121.78.0.1"
-          run_case "⑧ 全套（头+Cookie+XFF）" \
-            -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW" -H "Accept-Language: ko-KR,ko;q=0.9" \
-            -H "Cookie: language=ko; currency=KRW; POCA-LANGUAGE=ko" \
-            -H "X-Forwarded-For: 121.78.0.1" -H "Origin: https://phocamarket.com" -H "Referer: https://phocamarket.com/"
-          run_case "⑨ 只 UA（最裸）"
-          run_case "⑩ 浏览器 UA（反证）" \
-            -H "User-Agent-Mozilla: x" \
-            -H "Accept-Language: ko-KR,ko;q=0.9"
+          echo "===== 有没有 IPv6 地址 ====="
+          ip -6 addr show scope global 2>/dev/null | head -10 || echo "无全局 IPv6"
+          node -e "require('dns').resolve6('phocamarket.com',(e,a)=>console.log('phocamarket AAAA:',e?e.code:a))"
+          echo "===== IPv6 出口 IP ====="
+          curl -6 -sS -m 15 https://api64.ipify.org 2>&1 || echo "IPv6 不可用"
           echo
-          echo "===== ⑩ 说明：浏览器 UA 单独测 ====="
-          curl -sS -m 20 -o /dev/null -w "浏览器UA → HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
-            -H "Accept: application/json" "$U" || true
+          echo "===== 强制 IPv6 访问搜索 ====="
+          curl -6 -sS -m 20 -o /tmp/s6.bin -w "HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: $UA" -H "Accept: application/json" "$U" 2>&1 || echo "IPv6 请求失败"
+          head -c 100 /tmp/s6.bin 2>/dev/null; echo
 
-      - name: 换命名空间（全球域下有没有韩站路径）
+      - name: 全球站能不能给韩元
         continue-on-error: true
         run: |
           UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          Q='%EC%9E%A5%ED%95%98%EC%98%A4'
-          for p in \
-            "https://api.pocamarket.com/card/kr/v2/search?q=$Q" \
-            "https://api.pocamarket.com/card/kr/v3/search?q=$Q" \
-            "https://api.pocamarket.com/card/v3/search?q=$Q" \
-            "https://api.pocamarket.com/card/gb/v2/search?q=$Q&currency=KRW" \
-            "https://phocamarket.com/card/gb/v2/search?q=$Q" ; do
-            printf '%-58s ' "${p:8:56}"
-            curl -sS -m 20 -o /tmp/n.bin -w "HTTP %{http_code} size=%{size_download}" \
-              -H "Accept: application/json" -H "User-Agent: $UA" \
-              -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW" "$p" || true
-            echo " | $(head -c 70 /tmp/n.bin | tr -d '\n')"
+          B='https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
+          try() {
+            local name="$1"; shift
+            curl -sS -m 20 -o /tmp/g.bin -w "%{http_code}" "$@" "$B" >/tmp/code 2>/dev/null || true
+            printf '%-42s HTTP %-4s ' "$name" "$(cat /tmp/code)"
+            node -e "
+            try{const j=require('/tmp/g.bin');const a=(j.data&&j.data.results)||[];
+              const x=a.find(r=>r.price)||a[0]||{};
+              console.log('count='+(j.data&&j.data.count), '| display_currency='+x.display_currency, '| price='+x.price, '| localized='+x.discounted_price_localized);
+            }catch(e){console.log('解析失败')}"
+          }
+          try "① 基线（USD）"            -H "Accept: application/json" -H "User-Agent: $UA"
+          try "② POCA-CURRENCY: KRW"     -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-CURRENCY: KRW"
+          try "③ POCA-LANGUAGE: ko"      -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-LANGUAGE: ko"
+          try "④ 两个都带"                -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW"
+          echo
+          echo "===== 全球站单卡详情（看有没有韩元）====="
+          ID=$(node -e "const j=require('/tmp/g.bin');console.log(((j.data&&j.data.results)||[{}])[0].id||'')" 2>/dev/null)
+          echo "样本 id=$ID"
+          for p in "/card/gb/v1/$ID" "/card/v1/$ID"; do
+            printf '%-28s ' "$p"
+            curl -sS -m 20 -o /tmp/d.bin -w "HTTP %{http_code} size=%{size_download}" \
+              -H "Accept: application/json" -H "User-Agent: $UA" "https://api.pocamarket.com$p" || true
+            echo " | $(head -c 80 /tmp/d.bin | tr -d '\n')"
           done
 
-      - name: 全球站价格字段是否含韩元原值
+      - name: 站方是否在做灰度（连续打 6 次看会不会翻）
         continue-on-error: true
         run: |
           UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          curl -sS -m 20 -o /tmp/gb.json -w "全球站 HTTP %{http_code} size=%{size_download}\n" \
-            -H "Accept: application/json" -H "User-Agent: $UA" \
-            "https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
-          node -e "
-          const j=require('/tmp/gb.json');
-          const a=(j.data&&j.data.results)||[];
-          console.log('条数',a.length);
-          if(a.length){
-            console.log('字段:',Object.keys(a[0]).join(','));
-            console.log(JSON.stringify(a[0],null,1).slice(0,900));
-            console.log('--- 含 KRW 字样的字段 ---');
-            for(const k of Object.keys(a[0])) if(/krw|price|currency|amount/i.test(k)) console.log(' ',k,'=',JSON.stringify(a[0][k]));
-          }"
+          U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
+          for i in 1 2 3 4 5 6; do
+            printf '#%d ' $i
+            curl -sS -m 20 -o /dev/null -D /tmp/r.hdr -w "HTTP %{http_code} size=%{size_download}" \
+              -H "User-Agent: $UA" -H "Accept: application/json" "$U" || true
+            echo " ip=$(curl -sS -m 8 https://api.ipify.org 2>/dev/null)"
+            sleep 2
+          done
