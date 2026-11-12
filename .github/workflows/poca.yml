@@ -49,7 +49,10 @@ jobs:
       - name: 安装 Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # ⚠️⚠️ 必须 22。2026-11-12 实测：同一个 runner、同一套请求头、同一个 UA，
+          #    Node 20 → 整站 404/39 NOT_FOUND，Node 22 → 全 200。站方在 TLS 指纹层面分流，
+          #    20 的指纹被丢到没有该路由的旧后端。降到 20（或换回 curl）都会立刻复现故障。
+          node-version: '22'
 
       # 钉钉推送要把降价卡拼成集合图，需要 sharp（有预编译二进制，约 10 秒）
       - name: 安装 sharp（拼集合图用）
@@ -152,33 +155,12 @@ jobs:
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
 
       # ⚠️ 自检的目的只有一个：出事时能在日志里**一眼看出是哪一层坏了**。
-      #    2026-11-11：node 404 / curl 200 → 传输层（http1 被转到旧后端），改用 h2 修好。
-      #    2026-11-12：两个传输层都 404、连首页都 404 → 其实是**按 User-Agent 分流**，
-      #                浏览器 UA 一律 404 NOT_FOUND，App UA 才 200。所以现在同时打两种 UA。
-      - name: 出口网络自检（出口 IP / 两种 UA 的状态码）
-        run: |
-          UA_APP='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          UA_WEB='Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
-          U="https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4"
-          echo "===== 出口 IP ====="
-          curl -sS -m 15 https://api.ipify.org || true; echo
-          getent hosts phocamarket.com || true
-          for tag in APP WEB; do
-            eval "u=\$UA_$tag"
-            printf '%-4s 首页  ' "$tag"
-            curl -sS -m 20 -o /dev/null -w "HTTP %{http_code} size=%{size_download} http=%{http_version}\n" -H "User-Agent: $u" https://phocamarket.com/ || true
-            printf '%-4s 搜索  ' "$tag"
-            curl -sS -m 20 -o /tmp/s_$tag.json -w "HTTP %{http_code} size=%{size_download} http=%{http_version}\n" \
-              -H "Accept: application/json" -H "User-Agent: $u" \
-              -H "Accept-Language: ko-KR,ko;q=0.9" -H "POCA-DISPLAY-LANGUAGE: ko" \
-              -H "Referer: https://pocamarket.com/" "$U" || true
-            echo "       └ $(head -c 90 /tmp/s_$tag.json | tr -d '\n')"
-          done
-          echo "===== 判读 ====="
-          echo "  APP 200 / WEB 404(39B NOT_FOUND)  = 正常（站方按 UA 分流，脚本用 App UA）"
-          echo "  两个都 404 39B                     = 接口又搬家了，查 HOST/路径"
-          echo "  两个都 404 空体/1~2B               = IP 被限速，等"
-          echo "  两个都 200                         = 站方放松了，UA 无所谓"
+      #    2026-11-11：node 404 / curl 200 → 以为是传输层，改用 h2。
+      #    2026-11-12：两个传输层都 404、连首页都 404 → 以为是 UA；
+      #                最后 A/B 出真相：**同一个 runner，Node 20 全 404、Node 22 全 200**。
+      #    所以现在自检必须用与抓取相同的客户端（node），并且必须打印 Node 版本。
+      - name: 出口网络自检（Node 版本 / 出口 IP / 两种 UA）
+        run: node poca/_selfcheck.js
 
       - name: 抓取 Poca
         env:
