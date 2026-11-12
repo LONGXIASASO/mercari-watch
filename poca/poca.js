@@ -262,8 +262,13 @@ const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢
 //   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
 //   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
 const SKIP_DETAIL = process.argv.includes('--skip-detail');
-// 跳过明细时，上一轮 data.json 里的 det（含挂单「仍在挂」标记），由 workflow 拉取后提供
-let PREV_DET = {};
+// --fast：快跑轮，只更新搜索价（匹配最低价 p / 速切最低价 q）。详情和明细默认不走，
+//   但距上次完整抓取超过 POCA_DEEP_GAP（默认 55 分钟）会自动升级成完整抓取 —— 这样
+//   即使 workflow 的触发时刻被 cron-job.org 和 cron 撞得漂移，详情也不会被饿死。
+const FAST = process.argv.includes('--fast');
+// 上一轮 data.json（workflow 从 poca-data 拉到 poca/data.prev.json）
+let PREV_DET = {};    // 明细：挂单/成交行，含「仍在挂」标记，快跑轮原样沿用
+let PREV_ITEMS = {};  // 整卡：快跑轮兜底库存件数（搜索只给 is_stocked 布尔，会退化成「库 1」）
 const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足这么多分钟就跳过
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -710,26 +715,51 @@ const KIND_KR2EN = {
     console.log(`收藏排名完成 ${wishRank.size} 条（按 wish_count 自算）`);
   }
 
-  // 3) 明细（挂单 / 成交）——请求量最大、最容易触发限速的一段，可整段跳过
+  // 3) 详情 + 明细（每卡 1 请求拿求购/成交/库存件数，再按需补挂单成交明细）
+  //
+  // ⚠️ 2026-11-12 16:30 重构：搜索和详情彻底解耦。
+  //    页面卡片上两个主价格「匹配 / 速切」用的是**搜索接口**的 transaction_sell_price /
+  //    offer_price（前端绑 x.p / x.q），涨跌检测也基于这两个值 —— 也就是说
+  //    「价格 10 分钟一更」完全不需要详情。
+  //    详情只提供四样：最高求购 b、最近匹配成交 mp、速切最近成交 t、库存件数 st。
+  //    ⇒ 快跑轮（--fast）只跑搜索（68 请求），详情+明细压到约一小时一次（2426 请求）。
+  //      10 分钟快跑 144 轮 + 每小时 1 次完整 = 约 6.8 万请求/天，留在 10 万免费额度内。
   const ids = main.list.map(r => r.id);
-  // ⚠️ 2026-11-12 16:20：走 Cloudflare 中转后受每天 10 万请求限制，明细改成隔轮抓。
-  //    但明细不能只是「不抓就走档案」：darc 里没有「本轮仍在挂」这个状态位，
-  //    从档案重建会把所有挂单降成浅色（历史），页面会隔一轮闪一次。
-  //    所以跳过明细的轮次，直接沿用上一轮 data.json 里下发的 ds/dm（标记原样保留）。
-  //    上一轮文件由 workflow 从 poca-data 拉到 poca/data.prev.json；拉不到才退回档案兜底。
-  if (SKIP_DETAIL) {
+
+  const DEEP_GAP = Number(process.env.POCA_DEEP_GAP || 55);
+  let doDeep = true;
+  if (FAST) {
+    const last = prevState.deepAt ? new Date(prevState.deepAt).getTime() : 0;
+    const age = last ? (Date.now() - last) / 60000 : 1e9;
+    doDeep = age >= DEEP_GAP;
+    console.log(doDeep
+      ? `快跑轮 → 距上次完整抓取 ${age > 1e8 ? '未知' : Math.round(age) + ' 分钟'} ≥ ${DEEP_GAP}，本轮升级为完整抓取`
+      : `快跑轮 → 距上次完整抓取 ${Math.round(age)} 分钟 < ${DEEP_GAP}，只更新匹配/速切价（详情明细沿用上一轮）`);
+  }
+  const useDetail = doDeep && !SKIP_DETAIL;
+
+  // 需要沿用上一轮产物时，把整份 data.prev.json 读进来
+  if (!useDetail) {
     try {
       const p = path.join(HERE, 'data.prev.json');
-      if (fs.existsSync(p)) PREV_DET = JSON.parse(fs.readFileSync(p, 'utf8')).det || {};
+      if (fs.existsSync(p)) {
+        const pj = JSON.parse(fs.readFileSync(p, 'utf8'));
+        PREV_DET = pj.det || {};
+        for (const it of (pj.items || [])) if (it && it.id) PREV_ITEMS[it.id] = it;
+        console.log(`沿用上一轮 data.json：${Object.keys(PREV_ITEMS).length} 张卡`);
+      } else {
+        console.log('⚠️ 没有 data.prev.json，本轮详情/明细只能走档案兜底');
+      }
     } catch (e) {
-      console.log('上一轮 data.json 读不了，明细退回档案兜底：' + e.message);
+      console.log('上一轮 data.json 读不了，退回档案兜底：' + e.message);
     }
   }
-  const detail = SKIP_DETAIL ? {} : await fetchDetails(ids);
-  if (SKIP_DETAIL) {
-    console.log(`明细按 --skip-detail 跳过（省约 1300 请求）；沿用上一轮 ${Object.keys(PREV_DET).length} 张卡的挂单/成交记录，标记不变`);
+
+  const detail = useDetail ? await fetchDetails(ids) : {};
+  if (!useDetail) {
+    console.log(`详情+明细跳过（省约 2350 请求）；沿用上一轮 ${Object.keys(PREV_ITEMS).length} 张卡的求购/成交/库存/挂单记录`);
   } else {
-    console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
+    console.log(`详情+明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
   }
 
   // 明细永久档案 darc.json：站方每轮只给最新 5 条，这里把历轮拿到的挂单/成交行攒起来。
@@ -828,16 +858,20 @@ const KIND_KR2EN = {
     //    /card/v1/<id> 单卡详情实时提供（fetchDetails），只有接口失败时才回落 carry 保底。
     const p = num(r.transaction_sell_price);                  // 匹配：最低卖价
     const q = num(r.offer_price);                             // 速切：最低卖价
-    // 实时值：来自 /card/v1/<id> 单卡详情（fetchDetails），拿不到才回落 carry 保底
+    // 实时值：来自 /card/v1/<id> 单卡详情（fetchDetails）；快跑轮没有实测，
+    // 依次回落到「上一轮 data.json」→「carry 档案」。三级兜底，页面不会因为快跑变空。
     const dv = detail[r.id] || {};
+    const pv = PREV_ITEMS[r.id] || null;
     const liveB = num(dv.b), liveMp = num(dv.mp), liveT = num(dv.t);
     const hold = carry.d[r.id] || null;
-    const b = liveB || (hold ? num(hold[0]) : 0);              // 最高求购
-    const mp = liveMp || (hold ? num(hold[1]) : 0);            // 最近匹配成交
-    const t = liveT || (hold ? num(hold[2]) : 0);              // 速切最近成交
+    const b = liveB || (pv ? num(pv.b) : 0) || (hold ? num(hold[0]) : 0);   // 最高求购
+    const mp = liveMp || (pv ? num(pv.mp) : 0) || (hold ? num(hold[1]) : 0); // 最近匹配成交
+    const t = liveT || (pv ? num(pv.t) : 0) || (hold ? num(hold[2]) : 0);    // 速切最近成交
     const fromCarry = (b > 0 && !liveB) || (mp > 0 && !liveMp) || (t > 0 && !liveT);
-    // 库存：优先真实件数（get_collection_count），拿不到才回落 v3 的布尔
-    const stock = (dv.st === undefined) ? (r.is_stocked ? 1 : 0) : dv.st;
+    // 库存：本轮实测件数 → 上一轮件数 → v3 的布尔（快跑轮别退化成「库 1」）
+    const stock = (dv.st === undefined)
+      ? (pv && typeof pv.stock === 'number' ? pv.stock : (r.is_stocked ? 1 : 0))
+      : dv.st;
 
     // 存档：本轮拿到的（实时或沿用）值留作下一轮的保底
     if (b > 0 || mp > 0 || t > 0) carryNext[r.id] = [b, mp, t];
@@ -1023,7 +1057,13 @@ const KIND_KR2EN = {
   };
   fs.writeFileSync(path.join(HERE, 'data.json'), JSON.stringify(out), 'utf8');
   // ⚠️ pushed 是钉钉推送用的基准价（notify.js 维护），这里必须原样带过去，否则每轮首抓就把它冲掉
-  const nextState = { at: out.at, snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])), hist };
+  const nextState = {
+    at: out.at,
+    // 上一次真正跑详情+明细的时间；快跑轮靠它判断要不要升级成完整抓取（见 --fast 注释）
+    deepAt: useDetail ? out.at : (prevState.deepAt || ''),
+    snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])),
+    hist,
+  };
   // 保底值跟着 state.json 走，下一轮接着用（carry.json 只是首次种子，不参与更新）
   if (Object.keys(carryNext).length) nextState.carry = { at: carryAt, d: carryNext };
   if (prevState.pushed && Object.keys(prevState.pushed).length) nextState.pushed = prevState.pushed;
