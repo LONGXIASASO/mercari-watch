@@ -246,6 +246,11 @@ const TZ = 8 * 3600e3; // 北京时间
 
 const argOf = (n, d) => { const i = process.argv.indexOf('--' + n); return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : d; };
 const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢，可降频
+// 2026-11-12 实测（本机单轮 426s，1036 张卡）：
+//   搜索 65 请求 失败 0 ｜ 单卡详情 1036 请求 失败 0 ｜ 挂单/成交明细约 1500 请求 **失败 61**
+//   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
+//   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
+const SKIP_DETAIL = process.argv.includes('--skip-detail');
 const MIN_GAP_MIN = Number(argOf('min-gap', '0'));      // 距上次成功不足这么多分钟就跳过
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -350,52 +355,38 @@ function rawGet(p, timeout = 25000) {
   if (TRANSPORT === 'curl') return rawGetCurl(p);
   return rawGetNode(p, timeout);
 }
-async function getJson(p, tries = 4) {
+async function getJson(p, tries = 3) {
   const seen = [];
   for (let i = 0; i < tries; i++) {
     const r = await rawGet(p);
-    seen.push(r.s + '/' + (r.d || '').length + (r.d && r.d.length < 60 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
+    const len = (r.d || '').length;
+    seen.push(r.s + '/' + len + (r.d && len < 60 ? '[' + (r.d || '').replace(/\s/g, ' ') + ']' : ''));
     if (r.s === 200 && r.d && r.d.trim().startsWith('{')) { try { const j = JSON.parse(r.d); RATE_BACKOFF = 0; return j; } catch (e) {} }
-    // ⚠️ 404 也重试：站方多套后端轮询，404 只说明「这次命中的那套没有这条路由」，
-    //    以前直接 return null 等于一次 404 就整轮报废 —— 这正是连挂 6 轮的最后一环。
-    await sleep(400 * (i + 1));
+    // 404 空体 / 1~2 字节 = 站方按速率限了，换传输层和 UA 都没用，只能退避等待
+    const blank = (r.s === 404 || r.s === 429) && len <= 2;
+    if (i < tries - 1) {
+      if (blank) {
+        const wait = 1500 * Math.pow(2, i);           // 1.5s → 3s
+        RATE_BACKOFF++;
+        if (RATE_BACKOFF <= 3) console.log('  ⏳ 限速退避 ' + wait + 'ms：' + p.split('?')[0]);
+        await sleep(wait);
+      } else {
+        await sleep(500 * (i + 1));
+      }
+    }
   }
-  // 全部失败 → 先分清是「被限速」还是「链路不对」，两者处置完全不同：
-  //   404 空体 / 1~2 字节  = IP 被按速率限了（本地实测 20 并发跑到第 800 个请求就这样），
-  //                          换传输层没用，只能退避等待，等完还是原来那条路；
-  //   404 39 字节 NOT_FOUND = 命中了没有该路由的后端（h2 下不该出现），才需要降传输层。
-  const why = p.split('?')[0] + '（' + seen.join(',') + '）';
-  const slim = seen.map(x => x.split('[')[0]);
-  const rateLimited = slim.every(x => x === '404/0' || x === '404/1' || x === '404/2' || x === '429/0');
-  if (rateLimited && RATE_BACKOFF < 3) {
-    RATE_BACKOFF++;
-    const wait = 1500 * Math.pow(2, RATE_BACKOFF - 1); // 1.5s → 3s → 6s
-    console.log('  ⏳ 疑似站方限速（' + slim[0] + ' 空体），等 ' + wait + 'ms 再试：' + p.split('?')[0]);
-    await sleep(wait);
-    return getJson(p, tries);
-  }
-  if (TRANSPORT === 'h2' && H2_RECONNECT < 2) {
-    H2_RECONNECT++;
-    H2 = null;
-    console.log('  ⚠️ h2 连续 ' + tries + ' 次拿不到 ' + why + '，重建连接后重试（第 ' + H2_RECONNECT + ' 次）');
-    return getJson(p, tries);
-  }
-  if (TRANSPORT === 'h2') {
-    TRANSPORT = 'http1';
-    console.log('  ⚠️ h2 重建后仍失败 ' + why + '，传输层降级为 http1 重试');
-    return getJson(p, tries);
-  }
-  if (TRANSPORT === 'http1') {
-    TRANSPORT = 'curl';
-    console.log('  ⚠️ http1 连续 ' + tries + ' 次拿不到 ' + why + '，传输层降级为 curl 重试');
-    return getJson(p, tries);
-  }
-  // 最后一档：UA 也换一次（站方按 UA 分流，见文件头 2026-11-12 注释）
-  if (UA !== UA_WEB) {
-    UA = UA_WEB;
-    console.log('  ⚠️ app UA 全败 ' + why + '，改用浏览器 UA 再试一轮');
-    return getJson(p, tries);
-  }
+  // ⚠️⚠️ 2026-11-12 14:30 收敛重试链（用户质疑「越改越复杂」，复盘证明质疑是对的）
+  //
+  // 旧逻辑：一次失败会连环降级 h2 → 重建连接 ×2 → http1 → curl → 换浏览器 UA，
+  //        单条请求最坏要打 20 个请求。实测两个后果：
+  //          ① 明细阶段一旦触发限速，就被这套重试把限速打成「持续限速」，越重试越糟；
+  //          ② 降级到 curl 后每个请求 spawn 一个进程，整轮从 90s 拖到 10 分钟以上。
+  //        而且 11-11 / 11-12 两次「修好」事后证明都不是传输层和 UA 的功劳，
+  //        是恰好抽到了站方放行的出口 IP —— 这些补丁从来没解决过问题，只增加了复杂度。
+  //
+  // 新逻辑：只认一件事 —— 404 空体/1~2 字节 = 被限速，退避后重试（最多 3 次，总等待 10.5s）；
+  //        其余一律最多试 3 次就放手，本轮算这一个点失败，下一个继续。
+  //        「整轮失败」只由搜索首页判定，不在每个请求上纠缠。
   global.LASTGET = p.split('?')[0] + ' → ' + seen.join(',');
   return null;
 }
@@ -703,10 +694,14 @@ const KIND_KR2EN = {
     console.log(`收藏排名完成 ${wishRank.size} 条（按 wish_count 自算）`);
   }
 
-  // 3) 明细
+  // 3) 明细（挂单 / 成交）——请求量最大、最容易触发限速的一段，可整段跳过
   const ids = main.list.map(r => r.id);
-  const detail = await fetchDetails(ids);
-  console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
+  const detail = SKIP_DETAIL ? {} : await fetchDetails(ids);
+  if (SKIP_DETAIL) {
+    console.log(`明细按 --skip-detail 跳过（省约 1500 请求）；darc.json 历史档案原样保留，页面沿用往轮记录`);
+  } else {
+    console.log(`明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
+  }
 
   // 明细永久档案 darc.json：站方每轮只给最新 5 条，这里把历轮拿到的挂单/成交行攒起来。
   // 只增不减：读上一轮档案 → 并入本轮新行 → 原样写回，任何情况下都不清空已有记录。
