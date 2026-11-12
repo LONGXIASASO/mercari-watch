@@ -1,8 +1,17 @@
-name: Poca 接口探测（临时排障）
+name: Poca 接口探测（排障用，手动触发）
 
-# 只在需要排查时手动触发，不参与定时任务、不碰数据文件。
-# 关键对照：抓取 workflow 里有 `setup-node@v4 node-version: 20`，探测 workflow 没有。
-# 如果「装 Node 20」的 job 全 404、没装的 job 全 200 → 站方在 TLS/客户端指纹层面分流。
+# 卡市抓取失败时，先跑这个，再动 poca.js / poca.yml。
+# 只手动触发（workflow_dispatch），不参与定时任务、不写 poca-data、不碰任何数据文件。
+#
+# 2026-11-12 定的结论链（按这个顺序怀疑，别倒过来）：
+#   ① Node 主版本 —— 20 → 整站 404/39；22 → 全 200。所以第一个 job 专门装 20 做反证。
+#   ② User-Agent —— 只认 PocaMarket/x.y.z，浏览器 UA 一律 404/39。
+#   ③ 传输层 —— http2 / http1 / curl 三档，见 poca.js。
+#   ④ IP 限速 —— 404 空体或 1~2 字节。
+#
+# 读法：`n20` 全 404 + `system`(v22) 全 200 ＝ 一切正常，抓取没问题；
+#       两个都 404/39 ＝ 站方又改规矩了，看 UA 和 HOST；
+#       两个都 404 空体 ＝ IP 被限速，等。
 on:
   workflow_dispatch: {}
 
@@ -12,7 +21,7 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Node 20（与抓取 workflow 完全一致）
+      - name: 安装 Node 20（反证组：预期全 404）
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -27,7 +36,7 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
-      - name: 版本 + 探测（runner 自带 node）
+      - name: 版本 + 探测（对照组：runner 自带 node，预期全 200）
         continue-on-error: true
         run: |
           node -v
