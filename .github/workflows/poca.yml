@@ -202,16 +202,19 @@ jobs:
           done
           GATEBODY="$(head -c 200 /tmp/gate.bin 2>/dev/null)"
 
-          # 站方在响应头里自报「把这次访问归到哪个站点」，这是判断地区分流最硬的证据：
-          #   poca-display-language: ko → 韩站路由（我们要的，有 /card/v3 路由）
-          #                          en → 国际站后端（一直在躲的那套，没有 v3 路由 → 404/39）
-          # 每轮都打进日志，以后出事能直接看出「是从哪天开始变 en 的」，不用再猜。
+          # ⚠️⚠️ 响应头里的 poca-display-language / currency 只表示「展示偏好」，**不代表路由归属**。
+          #    2026-11-12 17:54 实测：Cloudflare 出口下站方判 en/USD，v3 接口照样 200 + 韩元原值
+          #    （线上 data.json：匹配价中位 4500、最高 140000，速切最高 250000，全是韩元；
+          #     pchg 既没出现跌价、也没丢历史点）。而 Azure 出口同样是 en/USD，却是 404/39。
+          #    所以**唯一判据只有「200 有数据 vs 404/39 NOT_FOUND」**，别看 language。
+          #    打印它是为了看趋势：万一哪天 v3 开始按 display currency 把韩元换算成美元，
+          #    价格会整体除以约 1350，pchg 会瞬间爆出上千条「跌价」——那时这里能对上号。
           hdr() { grep -i "^$1:" /tmp/gate.hdr 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1; }
           LANG=$(hdr 'poca-display-language')
           CURR=$(hdr 'poca-display-currency')
           SRV=$(hdr 'server')
-          echo "站方判定：language=${LANG:-?} currency=${CURR:-?} server=${SRV:-?}"
-          DETAIL="HTTP $CODE · ${SIZE} 字节 · 站方判为 ${LANG:-?}"
+          echo "响应头：language=${LANG:-?} currency=${CURR:-?} server=${SRV:-?}（仅供参考，不是路由判据）"
+          DETAIL="HTTP $CODE · ${SIZE} 字节 · 响应头 lang=${LANG:-?} cur=${CURR:-?}"
 
           if [ -n "$FOUND" ]; then
             echo "✅ 中转通路正常（生效 key=$FOUND）"
