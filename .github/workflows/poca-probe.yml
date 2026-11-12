@@ -1,21 +1,24 @@
 name: Poca 接口探测（临时排障）
 
-# 只在需要排查时手动触发，不参与定时任务、不碰任何数据文件。
-# 3 个并行 job = 3 台 runner = 3 个出口 IP，用来判断「失败是不是跟出口 IP 有关」。
+# 只在需要排查时手动触发，不参与定时任务、不碰数据文件（runner 是一次性的，产物随即销毁）。
+# A/B 对照：同一个 runner 上先跑 probe5（已知能 200），再跑真正的抓取脚本，
+# 用来区分「环境/IP 问题」还是「poca.js 自己的请求有问题」。
 on:
   workflow_dispatch: {}
 
 jobs:
-  net:
+  ab:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
-    strategy:
-      fail-fast: false
-      matrix:
-        n: [1, 2, 3]
+    timeout-minutes: 8
     steps:
       - name: 拉代码
         uses: actions/checkout@v4
-      - name: 出口 IP + 两种 UA
+      - name: 出口 IP + 两种 UA（对照组）
         continue-on-error: true
         run: node poca/_probe5.js
+      - name: 真正的抓取脚本（实验组，只看前 3 页）
+        continue-on-error: true
+        env:
+          POCA_Q: 장하오
+          POCA_CONC: '4'
+        run: timeout 150 node poca/poca.js --skip-wish || echo "（脚本退出，见上面的日志）"
