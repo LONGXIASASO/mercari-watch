@@ -37,7 +37,18 @@ const HERE = __dirname;
 //    实测（2026-11-12 11:10）app UA 下 5 个接口全 200：
 //      /card/v3/search、/card/v1/<id>、/card/v1/<id>/sell|buy|matching
 //    可用 POCA_UA 覆盖，留作下次站方又换规矩时的应急口。
-const HOST = 'phocamarket.com';
+// 🚨 2026-11-12 第四次事故定案：站方按**出口 IP 归属**分流。
+//    Azure/GitHub Actions 的所有出口被 GeoIP 判成「国际站」，而国际站后端没有 /card/v3 路由
+//    → 同一域名下 /card/v3/search 返回 39 字节 NOT_FOUND，/card/gb/v2/* 却 200（纯 USD，
+//      有 $5.6 地板，不能顶替韩元）。判据：响应头 poca-display-language/currency
+//      runner 恒 en/USD，本机/Cloudflare 为 zh-CN·CNY 或 ko/KRW。
+//    家宽 IP 能过、机房 IP 永远过不了 → 在 Actions 上套一层 Cloudflare Worker 中转：
+//      POCA_HOST=<worker>.workers.dev   POCA_KEY=<worker 里的 KEY>
+//    默认值保持直连，不设环境变量时行为与以前完全一致。
+const HOST = process.env.POCA_HOST || 'phocamarket.com';
+// 走中转时的鉴权头（Worker 校验）；直连时为空对象，一个头都不多发
+const KEY = process.env.POCA_KEY || '';
+const KHDR = KEY ? { 'x-poca-key': KEY } : {};
 
 const UA_APP = 'PocaMarket/2.7.4 (iPhone; iOS 18.0)';
 const UA_WEB = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
@@ -297,6 +308,7 @@ function rawGetH2(p, timeout = 25000) {
         'accept-language': 'ko-KR,ko;q=0.9',
         'poca-display-language': 'ko',
         referer: 'https://pocamarket.com/',
+        ...KHDR,
       });
     } catch (e) { return fin({ s: 0, d: '' }); }
     let st = 0, d = '';
@@ -316,6 +328,7 @@ const CURL_ARGS = p => [
   '-H', 'Accept-Language: ko-KR,ko;q=0.9',
   '-H', 'POCA-DISPLAY-LANGUAGE: ko',
   '-H', 'Referer: https://pocamarket.com/',
+  ...(KEY ? ['-H', 'x-poca-key: ' + KEY] : []),
   '-w', '\n__CODE__%{http_code}',
   'https://' + HOST + p,
 ];
@@ -338,6 +351,7 @@ function rawGetNode(p, timeout = 25000) {
         'User-Agent': UA, 'Accept': 'application/json',
         'Accept-Language': 'ko-KR,ko;q=0.9',
         'POCA-DISPLAY-LANGUAGE': 'ko', 'Referer': 'https://pocamarket.com/',
+        ...KHDR,
       },
     }, res => {
       let d = '';
