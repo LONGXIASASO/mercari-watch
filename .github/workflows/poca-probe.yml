@@ -3,41 +3,68 @@ name: Poca 接口探测（排障用，手动触发）
 # 卡市抓取失败时，先跑这个，再动 poca.js / poca.yml。
 # 只手动触发（workflow_dispatch），不参与定时任务、不写 poca-data、不碰任何数据文件。
 #
-# 2026-11-12 定的结论链（按这个顺序怀疑，别倒过来）：
-#   ① Node 主版本 —— 20 → 整站 404/39；22 → 全 200。所以第一个 job 专门装 20 做反证。
-#   ② User-Agent —— 只认 PocaMarket/x.y.z，浏览器 UA 一律 404/39。
-#   ③ 传输层 —— http2 / http1 / curl 三档，见 poca.js。
-#   ④ IP 限速 —— 404 空体或 1~2 字节。
-#
-# 读法：`n20` 全 404 + `system`(v22) 全 200 ＝ 一切正常，抓取没问题；
-#       两个都 404/39 ＝ 站方又改规矩了，看 UA 和 HOST；
-#       两个都 404 空体 ＝ IP 被限速，等。
+# 2026-11-12 13:31 起的故障：Node22 + App UA 全 404/39，且按 runner 出口 IP 分化
+#   #2431 出口 40.76.117.227 → 200
+#   #2432 出口 4.249.22.2    → 200
+#   #2433 出口 68.220.61.181 → 404
+#   #2434 出口 52.183.219.66 → 404
+# 本地（中国出口）同一 URL 200。怀疑站方 GeoDNS 把美国 runner 解析到了没更新路由的边缘。
+# 所以本探测重点：**系统 DNS 解析到哪台 IP** vs **强制指定源站 IP** 的结果差异。
 on:
   workflow_dispatch: {}
 
 jobs:
-  n20:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Node 20（反证组：预期全 404）
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: 版本 + 探测
-        continue-on-error: true
-        run: |
-          node -v
-          node poca/_probe6.js
+          node-version: '22'
 
-  system:
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    steps:
-      - uses: actions/checkout@v4
-      - name: 版本 + 探测（对照组：runner 自带 node，预期全 200）
+      - name: 出口 IP / DNS / 各通路矩阵
         continue-on-error: true
         run: |
-          node -v
-          node poca/_probe6.js
+          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
+          Q='%EC%9E%A5%ED%95%98%EC%98%A4'
+          P="/card/v3/search?q=$Q"
+          echo "===== 出口 IP ====="
+          curl -sS -m 15 https://api.ipify.org || true; echo
+          echo "===== 系统 DNS 解析到哪台 ====="
+          getent hosts phocamarket.com || true
+          node -e "require('dns').resolve4('phocamarket.com',(e,a)=>console.log('node resolve4:',e?e.code:a))"
+          echo
+          for target in auto 15.165.183.28 52.79.215.134; do
+            if [ "$target" = "auto" ]; then RES=""; else RES="--resolve phocamarket.com:443:$target"; fi
+            echo "===== [$target] 首页 ====="
+            curl -sS -m 20 $RES -o /tmp/h.bin -w "HTTP %{http_code} size=%{size_download} h=%{http_version} ip=%{remote_ip}\n" \
+              -H "User-Agent: $UA" https://phocamarket.com/ || true
+            echo "===== [$target] 搜索 ====="
+            curl -sS -m 20 $RES -o /tmp/s.bin -w "HTTP %{http_code} size=%{size_download} h=%{http_version} ip=%{remote_ip}\n" \
+              -H "Accept: application/json" -H "User-Agent: $UA" \
+              -H "Accept-Language: ko-KR,ko;q=0.9" -H "POCA-DISPLAY-LANGUAGE: ko" \
+              -H "Referer: https://pocamarket.com/" "https://phocamarket.com$P" || true
+            echo "       └ $(head -c 110 /tmp/s.bin | tr -d '\n')"
+            echo
+          done
+
+      - name: 响应头对照（看是不是 CDN 层面在拦）
+        continue-on-error: true
+        run: |
+          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
+          echo "===== 首页响应头（auto）====="
+          curl -sS -m 20 -D - -o /dev/null -H "User-Agent: $UA" https://phocamarket.com/ 2>&1 | head -18 || true
+          echo "===== 搜索响应头（auto）====="
+          curl -sS -m 20 -D - -o /dev/null -H "Accept: application/json" -H "User-Agent: $UA" \
+            "https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" 2>&1 | head -18 || true
+
+      - name: 全球站对照组（判断是否只影响韩站）
+        continue-on-error: true
+        run: |
+          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
+          echo "===== api.pocamarket.com 全球站 ====="
+          curl -sS -m 20 -o /tmp/gb.bin -w "HTTP %{http_code} size=%{size_download} h=%{http_version} ip=%{remote_ip}\n" \
+            -H "Accept: application/json" -H "User-Agent: $UA" \
+            "https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4" || true
+          echo "       └ $(head -c 100 /tmp/gb.bin | tr -d '\n')"
