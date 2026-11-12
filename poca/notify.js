@@ -581,7 +581,11 @@ function postJson(url, body) {
 
   // 只更新「真的发出去、真的告诉过她」的那些卡；发失败或超上限没列的，下轮还会再推一次
   const next = Object.assign({}, pushed);
-  for (const x of data.items) if (!next[x.id]) next[x.id] = [x.p, x.q];
+  for (const x of data.items) {
+    if (!next[x.id]) { next[x.id] = [x.p, x.q]; continue; }
+    // 与 savePushed 一致：现在无报价的就把基准清零，等它重新有价时按「新上架」报
+    if (!(x.p > 0) && !(x.q > 0)) next[x.id] = [0, 0];
+  }
   for (const h of sentCards) {
     const x = data.items.find(i => i.id === h.id);
     if (!x) continue;
