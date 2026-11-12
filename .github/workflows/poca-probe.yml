@@ -1,0 +1,37 @@
+name: Poca 接口探测（临时排障）
+
+# 只在需要排查「接口到底搬去哪」时手动触发，不参与定时任务、不碰任何数据文件。
+on:
+  workflow_dispatch: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 拉代码
+        uses: actions/checkout@v4
+
+      - name: 节点版本
+        run: node -v
+
+      - name: 探测矩阵
+        continue-on-error: true
+        run: node poca/_probe3.js
+
+      - name: 对照（curl 走系统栈）
+        continue-on-error: true
+        run: |
+          UA='Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+          Q='%EC%9E%A5%ED%95%98%EC%98%A4'
+          for u in \
+            "https://phocamarket.com/" \
+            "https://phocamarket.com/card/v3/search?q=$Q" \
+            "https://api.pocamarket.com/card/gb/v2/search?q=$Q" \
+            "https://api.pocamarket.com/card/kr/v2/search?q=$Q" \
+            "https://pocamarket.com/" ; do
+            printf '%-58s ' "${u:8:56}"
+            curl -sS -m 20 -o /tmp/o.bin -w "HTTP %{http_code} h=%{http_version} size=%{size_download}" \
+              -H "User-Agent: $UA" -H "Accept: application/json" -H "Referer: https://pocamarket.com/" "$u" || true
+            echo " | $(head -c 60 /tmp/o.bin | tr -d '\n')"
+          done
