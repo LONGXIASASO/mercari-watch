@@ -1,12 +1,13 @@
 name: Poca 卡市监控
 
 # 抓 장하오 全量卡（约 1036 张），全天不停（含夜间）。
-# ⚠️ 2026-11-12 16:00 起走 Cloudflare Worker 中转，出口不再是 Azure 机房 IP；
-#    受 Workers 免费版每天 10 万请求限制，实际节流到约 30 分钟一轮（见抓取步骤注释）。
+# ⚠️ 2026-11-12 16:00 起走 Cloudflare Worker 中转，出口不再是 Azure 机房 IP。
+#    价格（匹配/速切最低价 + 涨跌）每 10 分钟一轮；求购/成交/库存件数/挂单明细约 55 分钟一轮。
+#    分工原因与预算见「抓取 Poca」步骤的注释（免费额度 10 万请求/天）。
 # GitHub 自带 schedule 很不准（整点最挤，可能推迟几十分钟甚至跳过），
 # 所以主力仍是 cron-job.org 每 10 分钟 POST 一次 workflow_dispatch，schedule 只当兜底。
-# 两条调度会互相撞：脚本内部 --min-gap 28 会挡住重复触发，不会挡掉正常的一轮
-# （单轮抓取约 50 秒，30 分钟周期绰绰有余）。
+# 两条调度会互相撞：脚本内部 --min-gap 8 会挡住同一时段的重复触发，
+# 不会挡掉正常的一轮（快跑轮约 20 秒，完整轮约 60 秒）。
 # 收藏排名：一天只抓一次，安排在北京时间 1:30 之后那一场，其余轮次沿用缓存。
 
 on:
@@ -202,28 +203,24 @@ jobs:
           POCA_KEY: poca_9f3k2m7xq4wzv8hd
         run: |
           # ⚠️⚠️ Cloudflare 免费版每天 10 万次请求，是这套方案唯一的硬约束。
-          #    一轮实测：搜索 65 + 固定卡 3 + 详情 1036 + 明细 1322 ≈ 2400 请求
-          #    → 10 万 ÷ 2400 ≈ 40 轮/天上限。所以两件事必须同时做：
-          #      ① --min-gap 28：不管 cron 还是 cron-job.org 触发，两次真抓之间至少隔 28 分钟。
-          #         触发粒度是 10 分钟，所以实际稳定在约 30 分钟一轮（≈48 轮/天）。
-          #      ② 明细（占一半请求）隔轮抓：run_number 奇偶 → 约 60 分钟一次；
-          #         跳过时页面明细从 darc.json 历史档案兜底，不会变空。
-          #    合计约 8.5 万/天，留 15% 余量。想回到 10 分钟一轮，需要升 Workers 付费版
-          #    （$5/月，1000 万请求/月），届时把 min-gap 调回 8、去掉 DETAIL 判断即可。
-          DETAIL=""
-          if [ $(( ${{ github.run_number }} % 2 )) -eq 0 ]; then DETAIL="--skip-detail"; fi
-          if [ -n "$DETAIL" ]; then echo "本轮：主数据刷新，明细沿用档案"; else echo "本轮：主数据 + 明细全量"; fi
+          #    2026-11-12 16:30 起把「搜索」和「详情」彻底拆开：
+          #      · 搜索（匹配最低价 p / 速切最低价 q + 涨跌检测）—— 页面主价格就靠它，
+          #        每 10 分钟一轮，一轮只有 68 个请求。
+          #      · 详情+明细（最高求购 / 最近成交 / 库存件数 / 挂单成交记录）—— 2426 请求一轮，
+          #        由脚本内部按 POCA_DEEP_GAP 判断，约 55 分钟才真跑一次。
+          #    所以这里每轮都传 --fast，脚本自己决定要不要升级成完整抓取。
+          #    预算：144 轮 × 68 + 24 轮 × 2426 ≈ 6.8 万/天，留 32% 余量。
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
-            node poca/poca.js --min-gap 28 --skip-wish $DETAIL
+            node poca/poca.js --min-gap 8 --fast --skip-wish
           else
-            node poca/poca.js --min-gap 28 $DETAIL
+            node poca/poca.js --min-gap 8 --fast
           fi
 
       - name: 确认产物
         run: |
           # 被节流跳过时没有新的 data.json，直接结束本轮（不算失败）
           if [ ! -s poca/data.json ]; then
-            echo "⏭ 本轮跳过（距上次成功不足 28 分钟，节流），没有新产物"
+            echo "⏭ 本轮跳过（距上次成功不足 8 分钟，节流），没有新产物"
             echo "SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
