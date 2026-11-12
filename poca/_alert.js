@@ -18,6 +18,7 @@
  *   GATE_DETAIL  预检细节：HTTP 码 · 体长 · 站方判定站点
  *   GATE_URGENT  '1' = 我们自己的代码坏了，不等阈值立即发
  *   JOB_STATUS   job.status；failure 且预检通过 = 抓取中途挂了
+ *   SKIP         '1' = 本轮被 --min-gap 节流跳过（要配合 GATE_OK=='1' 才是正常节流）
  */
 const fs = require('fs');
 const path = require('path');
@@ -52,10 +53,18 @@ const cnTime = v => {
 
 const fresh = readJson('data.json');
 const prev = readJson('data.prev.json');
+const SKIP = (process.env.SKIP || '').trim();
 
 // 本轮成功落了新数据 → 后面涨跌推送会照顾到，这里不吵
 if (GATE_OK === '1' && fresh && Array.isArray(fresh.items) && fresh.items.length) {
   console.log(`✅ 本轮成功（${fresh.items.length} 张，更新于 ${fresh.at_cn || cnTime(fresh.at)}），不告警`);
+  process.exit(0);
+}
+
+// ⚠️ 节流跳过（cron-job.org 和 GitHub cron 撞在一起，距上次成功不足 8 分钟）是**正常现象**，
+//    不是异常。预检失败时也会置 SKIP=1，所以必须同时看 GATE_OK=='1' 才能区分。
+if (GATE_OK === '1' && SKIP === '1') {
+  console.log('⏭ 本轮被 --min-gap 节流跳过（距上次成功不足 8 分钟），属于正常现象，不告警');
   process.exit(0);
 }
 
