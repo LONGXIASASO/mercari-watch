@@ -1,16 +1,14 @@
-name: Poca 接口探测（排障用，手动触发）
+name: Poca 出口替代探测（排障用，手动触发）
 
-# 2026-11-12 13:31 起的故障：站方按**来源 IP 归属地区**分流。
-#   同一份代码 / 同 Node22 / 同 App UA：
-#     #2431 40.76.117.227 → 200      #2432 4.249.22.2   → 200
-#     #2433 68.220.61.181 → 404      #2434 52.183.219.66 → 404
-#     #2435 20.169.68.242 → 404      #2436 20.14.214.53  → 404
-#   本地（中国出口）同一 URL → 200，首页 32982 字节。
-# 已排除：GeoDNS（runner 解析到的是真实源站，强制 --resolve 两台都 404）、
-#         网络封禁（同 runner 上 api.pocamarket.com 全球站 200）、
-#         请求头伪装（POCA-LANGUAGE/POCA-CURRENCY/Cookie/XFF 八种组合全 404，
-#         响应头 poca-display-language 恒为 en、currency 恒为 USD）。
-# 本探测找**替代出口/替代数据源**，不再纠缠请求特征。
+# 2026-11-12 13:31 起的故障：站方按**来源 IP 归属地区**分流，GitHub 机房（Azure 美国）
+# 被划到国际站那侧，而国际站后端没有 /card/v3 路由 → 整站 404 NOT_FOUND。
+#    #2431 40.76.117.227 → 200      #2432 4.249.22.2   → 200
+#    #2433 68.220.61.181 → 404      #2434 52.183.219.66 → 404
+#    #2435 20.169.68.242 → 404      #2436 20.14.214.53  → 404
+# 已排除：GeoDNS、网络封禁（同 runner 访问全球站 200）、请求头伪装（8 种组合全 404）、IPv6。
+# 本探测只做两件事：
+#   ① 有没有免费中转能让请求从别的地区出去（有 → Actions 立刻复活，零成本）
+#   ② 全球站详情里有没有韩元原值（有 → 换数据源也不破坏历史韩元价）
 on:
   workflow_dispatch: {}
 
@@ -19,66 +17,74 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: IPv6 出站（换一条源 IP）
+      - name: 基线（确认这轮 runner 仍是 404）
+        run: |
+          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
+          U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
+          echo "出口 IP: $(curl -sS -m 12 https://api.ipify.org)"
+          printf '直连搜索  '
+          curl -sS -m 20 -o /tmp/base.bin -D /tmp/base.hdr -w "HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: $UA" -H "Accept: application/json" "$U" || true
+          echo "ctx: $(grep -i '^poca-display' /tmp/base.hdr | tr -d '\r' | tr '\n' ' ')"
+
+      # 关键测试：如果某个免费中转的服务器不在美国，请求就会走对后端。
+      # 判据：HTTP 200 且 body 里含 transaction_sell_price。
+      - name: ① 免费中转能不能穿透
         continue-on-error: true
         run: |
           UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
           U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          echo "===== 有没有 IPv6 地址 ====="
-          ip -6 addr show scope global 2>/dev/null | head -10 || echo "无全局 IPv6"
-          node -e "require('dns').resolve6('phocamarket.com',(e,a)=>console.log('phocamarket AAAA:',e?e.code:a))"
-          echo "===== IPv6 出口 IP ====="
-          curl -6 -sS -m 15 https://api64.ipify.org 2>&1 || echo "IPv6 不可用"
-          echo
-          echo "===== 强制 IPv6 访问搜索 ====="
-          curl -6 -sS -m 20 -o /tmp/s6.bin -w "HTTP %{http_code} size=%{size_download}\n" \
-            -H "User-Agent: $UA" -H "Accept: application/json" "$U" 2>&1 || echo "IPv6 请求失败"
-          head -c 100 /tmp/s6.bin 2>/dev/null; echo
-
-      - name: 全球站能不能给韩元
-        continue-on-error: true
-        run: |
-          UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          B='https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          try() {
-            local name="$1"; shift
-            curl -sS -m 20 -o /tmp/g.bin -w "%{http_code}" "$@" "$B" >/tmp/code 2>/dev/null || true
-            printf '%-42s HTTP %-4s ' "$name" "$(cat /tmp/code)"
-            node -e "
-            try{const j=require('/tmp/g.bin');const a=(j.data&&j.data.results)||[];
-              const x=a.find(r=>r.price)||a[0]||{};
-              console.log('count='+(j.data&&j.data.count), '| display_currency='+x.display_currency, '| price='+x.price, '| localized='+x.discounted_price_localized);
-            }catch(e){console.log('解析失败')}"
+          ENC=$(node -e "console.log(encodeURIComponent('$U'))")
+          t() {
+            local name="$1"; local url="$2"; shift 2
+            printf '%-22s ' "$name"
+            code=$(curl -sS -m 28 -o /tmp/p.bin -w '%{http_code}' -H "User-Agent: $UA" "$@" "$url" 2>/dev/null || echo ERR)
+            sz=$(wc -c < /tmp/p.bin 2>/dev/null | tr -d ' ')
+            hit=$(grep -c 'transaction_sell_price' /tmp/p.bin 2>/dev/null || echo 0)
+            printf 'HTTP %-4s size=%-7s 含报价字段=%s | %s\n' "$code" "$sz" "$hit" "$(head -c 60 /tmp/p.bin | tr -d '\n' | tr -d '\r')"
           }
-          try "① 基线（USD）"            -H "Accept: application/json" -H "User-Agent: $UA"
-          try "② POCA-CURRENCY: KRW"     -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-CURRENCY: KRW"
-          try "③ POCA-LANGUAGE: ko"      -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-LANGUAGE: ko"
-          try "④ 两个都带"                -H "Accept: application/json" -H "User-Agent: $UA" -H "POCA-LANGUAGE: ko" -H "POCA-CURRENCY: KRW"
-          echo
-          echo "===== 全球站单卡详情（看有没有韩元）====="
-          ID=$(node -e "const j=require('/tmp/g.bin');console.log(((j.data&&j.data.results)||[{}])[0].id||'')" 2>/dev/null)
-          echo "样本 id=$ID"
-          for p in "/card/gb/v1/$ID" "/card/v1/$ID"; do
-            printf '%-28s ' "$p"
-            curl -sS -m 20 -o /tmp/d.bin -w "HTTP %{http_code} size=%{size_download}" \
-              -H "Accept: application/json" -H "User-Agent: $UA" "https://api.pocamarket.com$p" || true
-            echo " | $(head -c 80 /tmp/d.bin | tr -d '\n')"
-          done
+          t "allorigins"  "https://api.allorigins.win/raw?url=$ENC"
+          t "codetabs"    "https://api.codetabs.com/v1/proxy?quest=$U"
+          t "corsproxy.io" "https://corsproxy.io/?url=$ENC"
+          t "cors.lol"    "https://api.cors.lol/?url=$ENC"
+          t "thingproxy"  "https://thingproxy.freeboard.io/fetch/$U"
+          t "jina.ai"     "https://r.jina.ai/$U"
+          t "corsfix"     "https://proxy.corsfix.com/?$U"
+          t "whateverorigin" "http://www.whateverorigin.org/get?url=$ENC"
 
-      - name: 站方是否在做灰度（连续打 6 次看会不会翻）
+      - name: ② 全球站详情有没有韩元原值
         continue-on-error: true
         run: |
           UA='PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-          U='https://phocamarket.com/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          for i in 1 2 3 4 5 6; do
-            printf '#%d ' $i
-            curl -sS -m 20 -o /dev/null -D /tmp/r.hdr -w "HTTP %{http_code} size=%{size_download}" \
-              -H "User-Agent: $UA" -H "Accept: application/json" "$U" || true
-            echo " ip=$(curl -sS -m 8 https://api.ipify.org 2>/dev/null)"
-            sleep 2
+          G='https://api.pocamarket.com/card/gb/v2/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
+          curl -sS -m 25 -o /tmp/gb.json -w "全球站搜索 HTTP %{http_code} size=%{size_download}\n" \
+            -H "User-Agent: $UA" -H "Accept: application/json" "$G" || true
+          ID=$(node -e "const j=require('/tmp/gb.json');const a=(j.data&&j.data.results)||[];console.log(a[0]&&a[0].id||'')" 2>/dev/null)
+          echo "样本 id=$ID"
+          node -e "
+          const j=require('/tmp/gb.json');const a=(j.data&&j.data.results)||[];const x=a[0]||{};
+          console.log('搜索字段:', Object.keys(x).join(','));
+          console.log('样本:', JSON.stringify(x).slice(0,500));
+          " 2>&1 | head -6
+          for p in "/card/gb/v1/$ID" "/card/gb/v2/$ID" "/card/v1/$ID"; do
+            printf '%-26s ' "$p"
+            curl -sS -m 20 -o /tmp/gd.bin -w "HTTP %{http_code} size=%{size_download}" \
+              -H "User-Agent: $UA" -H "Accept: application/json" "https://api.pocamarket.com$p" || true
+            echo " | $(head -c 90 /tmp/gd.bin | tr -d '\n')"
           done
+          echo "----- 详情里出现的货币/价格字段 -----"
+          node -e "
+          const fs=require('fs');
+          const t=fs.readFileSync('/tmp/gd.bin','utf8');
+          try{ const j=JSON.parse(t); const d=j.data||j;
+            const keys=[]; (function walk(o,pf){ if(!o||typeof o!=='object')return;
+              for(const k of Object.keys(o)){ const v=o[k];
+                if(/price|currency|krw|usd|amount/i.test(k)) keys.push(pf+k+'='+JSON.stringify(v).slice(0,40));
+                else if(v&&typeof v==='object') walk(v,pf+k+'.'); } })(d,'');
+            console.log(keys.slice(0,40).join('\n')||'(没找到价格字段)');
+          }catch(e){ console.log('解析失败:',e.message); }
+          "
