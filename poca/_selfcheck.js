@@ -1,14 +1,40 @@
 // 出口自检：一出事就能在日志里看清是哪一层坏了。
 // 教训（2026-11-12）：之前用 curl 打自检，curl 自己也是 404，把「Node 版本被分流」误判成 IP 被挡。
-// 所以自检必须**用和抓取完全相同的客户端（node）**，只切变量（UA）。
+// 教训（2026-11-13）：结论又反了 —— 站方按**客户端 TLS 指纹**分流：
+//   curl（Schannel / libcurl）→ 200，node 内置 http2（OpenSSL）→ 404/39。
+//   所以自检必须**先看抓取实际用的那个客户端（curl）**；h2 只作对照打印，它的 404 是预期。
 const http2 = require('http2');
 const https = require('https');
+const { execFile } = require('child_process');
 
 const HOST = 'phocamarket.com';
 const SEARCH = '/card/v3/search?q=' + encodeURIComponent('장하오');
 const UA_APP = 'PocaMarket/2.7.4 (iPhone; iOS 18.0)';
 const UA_WEB = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
+// 抓取实际在用的客户端：curl
+function viaCurl(ua) {
+  return new Promise(res => {
+    const args = [
+      '-sS', '-m', '25', '--connect-timeout', '15',
+      '-H', 'User-Agent: ' + ua,
+      '-H', 'Accept: application/json',
+      '-H', 'Accept-Language: ko-KR,ko;q=0.9',
+      '-H', 'POCA-DISPLAY-LANGUAGE: ko',
+      '-H', 'Referer: https://pocamarket.com/',
+      '-w', '\n__CODE__%{http_code}',
+      'https://' + HOST + SEARCH,
+    ];
+    execFile('curl', args, { maxBuffer: 24 * 1024 * 1024, timeout: 30000 }, (err, stdout) => {
+      const out = String(stdout || '');
+      const m = /__CODE__(\d+)\s*$/.exec(out);
+      const body = out.replace(/__CODE__\d+\s*$/, '');
+      res({ s: m ? Number(m[1]) : 0, len: Buffer.byteLength(body, 'utf8'), err: err ? (err.code || 'ERR') : '' });
+    });
+  });
+}
+
+// 对照：node 内置 http2（OpenSSL 指纹，预期被 404）
 function h2(path, ua) {
   return new Promise(res => {
     let c;
@@ -42,20 +68,24 @@ function egressIp() {
 
 (async () => {
   const ip = await egressIp();
-  const a = await h2(SEARCH, UA_APP);
-  const b = await h2(SEARCH, UA_WEB);
-  console.log('node ' + process.version + ' | 出口 IP ' + ip + ' | TLS ' + process.versions.openssl);
-  console.log(`App UA  ${a.s} ${a.len}   ${a.s === 200 ? '✅' : '❌'}`);
-  console.log(`网 UA   ${b.s} ${b.len}   ${b.s === 404 ? '✅（正常，本来就是给 App 用的）' : '⚠️'}`);
+  const cApp = await viaCurl(UA_APP);
+  const cWeb = await viaCurl(UA_WEB);
+  const hApp = await h2(SEARCH, UA_APP);
+  console.log(`node ${process.version} | ${process.platform}/${process.arch} | 出口 IP ${ip}`);
+  console.log(`curl + App UA    ${cApp.s} ${cApp.len} 字节  ${cApp.s === 200 ? '✅' : '❌' + (cApp.err ? ' (' + cApp.err + ')' : '')}`);
+  console.log(`curl + 网页 UA   ${cWeb.s} ${cWeb.len} 字节  ${cWeb.s === 404 ? '✅（预期，接口只给 App 用）' : cWeb.s === 200 ? '⚠️ 也 200' : '⚠️ ' + cWeb.s}`);
+  console.log(`node h2 + App UA ${hApp.s} ${hApp.len} 字节  ${hApp.s === 200 ? '✅' : 'ℹ️ 404 是预期（指纹被拦），抓取已不用 h2'}`);
   console.log('===== 判读 =====');
-  if (a.s === 200) {
-    console.log('✅ 通路正常，应用 UA 能拿到数据');
-  } else if (a.s === 404 && a.len === 39) {
-    console.log('❌ 404/39 NOT_FOUND = 被分流到「没有该路由」的后端。按 2026-11-12 的结论，');
-    console.log('   先查 Node 主版本（20 会被 404、22 正常），再查 UA，最后才怀疑 IP。');
-  } else if (a.s === 404 && a.len <= 2) {
-    console.log('⚠️ 404 空体 = 大概率被按速率限速，等几分钟再试');
-  } else if (a.s === 0) {
-    console.log('❌ 连不上（DNS/TLS/超时），查出口网络');
+  if (cApp.s === 200) {
+    console.log('✅ 通路正常：curl 能拿到数据，与抓取用的客户端一致');
+  } else if (cApp.s === 404 && cApp.len === 39) {
+    console.log('❌ curl 也 404/39 = 这个出口整体被判（地区分流 / 指纹白名单又变），不是客户端选错。');
+    console.log('   下一步看预检日志里三级出口哪一级通。');
+  } else if (cApp.s === 404 && cApp.len <= 2) {
+    console.log('⚠️ 404 空体 = 大概率按速率限速，等几分钟再试');
+  } else if (cApp.s === 0) {
+    console.log('❌ curl 连不上（DNS/TLS/超时），查出口网络；err=' + (cApp.err || '-'));
+  } else {
+    console.log(`⚠️ 非预期状态码 ${cApp.s}，响应 ${cApp.len} 字节`);
   }
 })();
