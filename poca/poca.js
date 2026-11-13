@@ -12,6 +12,8 @@
  */
 const https = require('https');
 const http2 = require('http2');
+const net = require('net');
+const tls = require('tls');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -304,22 +306,75 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 //    不是接口变更、不是 IP 被墙、不是限速 —— 改 HOST 永远修不好。
 //    所以主传输换成 **http2**（顺带白赚多路复用：不用每请求新建连接，比原来的 http1 还快），
 //    拿不到就降级 http1，再不行降级 curl。POCA_HTTP=h2|http1|curl 可强制。
-// ⚠️ 2026-11-13：走代理（POCA_PROXY）时默认改用 curl —— node 的 h2 不支持 HTTP 代理隧道，
-//    而 curl 自带 CONNECT + ALPN 协商，且它的 TLS 指纹站方一直认（11-11 传输层矩阵实测 curl 200）。
-//    代价是每请求 spawn 一个进程，所以并发给到 16。POCA_HTTP 仍可强制覆盖。
+// ⚠️ 2026-11-13：走代理（POCA_PROXY）时**仍然用 h2**，只是把连接换成「CONNECT 隧道 + TLS(h2)」。
+//    不能用 curl 兜底：实测 Actions 的 Ubuntu curl 经同一个韩国节点出去仍是 404/39，
+//    指纹一换就被丢回旧后端；node h2 的指纹才是站方放行的那一档。
 let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP)
   ? process.env.POCA_HTTP
-  : (PROXY ? 'curl' : 'h2');
+  : 'h2';
 let H2_RECONNECT = 0;
 let RATE_BACKOFF = 0;   // 疑似「被限速」的退避次数，成功一次就清零
 
 // ── HTTP/2 ──
 // 单连接多路复用；一条 session 上开太多并发流会被服务端 RST（ENHANCE_YOUR_CALM），
 // 并发仍由 CONC / CONC_DETAIL 控制，这里只管「断了自动重连」。
+// ⚠️ 2026-11-13 实测（关键）：订阅兜底那轮，Actions 上的 curl 经韩国节点出去**仍是 404/39**，
+//    而同一台韩国节点（同 IP 64.176.234.49）从本机 Windows curl 出去是 200。
+//    ⇒ 站方判的不只是出口 IP，还有客户端 TLS / HTTP2 指纹：Actions 的 Ubuntu curl 指纹
+//      被丢回旧后端（旧后端没有 /card/v3，于是 39 字节 NOT_FOUND）。
+//      这跟 11-12「同一个 runner，Node 20 全 404 / Node 22 全 200」是同一套机制。
+//    ⇒ 所以订阅出口也必须用 **node + h2**，不能退到 curl。node 的 h2 不支持 http 代理，
+//      这里自己实现 CONNECT 隧道：net 连代理 → 发 CONNECT → 在裸 socket 上做 TLS(h2) → 交给 http2.connect。
 let H2 = null;
-function h2Session() {
-  if (H2 && !H2.destroyed && !H2.closed) return H2;
-  const s = http2.connect('https://' + HOST);
+let H2_PENDING = null;
+
+function proxyTunnel(proxyHost, proxyPort, host, port) {
+  return new Promise((resolve, reject) => {
+    const s = net.connect({ host: proxyHost, port: proxyPort });
+    let head = '';
+    let settled = false;
+    const fail = e => { if (settled) return; settled = true; try { s.destroy(); } catch (_) {} reject(e); };
+    s.setTimeout(15000);
+    s.on('connect', () => { s.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n\r\n`); });
+    s.on('error', fail);
+    s.on('timeout', () => fail(new Error('代理连接超时')));
+    const onData = d => {
+      head += d.toString('latin1');
+      const i = head.indexOf('\r\n\r\n');
+      if (i < 0) { if (head.length > 4096) fail(new Error('CONNECT 响应过长')); return; }
+      s.removeListener('data', onData);
+      s.removeListener('error', fail);
+      s.removeListener('timeout', fail);
+      s.setTimeout(0);
+      const first = head.slice(0, head.indexOf('\r\n'));
+      if (!/^HTTP\/1\.[01] 200/.test(first)) return fail(new Error('CONNECT 被拒: ' + first));
+      const rest = Buffer.from(head.slice(i + 4), 'latin1');
+      if (rest.length) s.unshift(rest);
+      if (settled) return;
+      settled = true;
+      resolve(s);
+    };
+    s.on('data', onData);
+  });
+}
+
+async function buildH2() {
+  let s;
+  if (PROXY) {
+    const u = new URL(PROXY);
+    const raw = await proxyTunnel(u.hostname, Number(u.port) || 8080, HOST, 443);
+    const t = tls.connect({ socket: raw, servername: HOST, ALPNProtocols: ['h2'] });
+    await new Promise((res, rej) => {
+      t.once('secureConnect', res);
+      t.once('error', rej);
+      t.setTimeout(15000, () => rej(new Error('TLS 握手超时')));
+    });
+    if (t.alpnProtocol !== 'h2') throw new Error('走代理的 TLS 没协商到 h2（实际 ' + t.alpnProtocol + '）');
+    t.setTimeout(0);
+    s = http2.connect('https://' + HOST, { createConnection: () => t });
+  } else {
+    s = http2.connect('https://' + HOST);
+  }
   s.on('error', () => {});
   s.on('goaway', () => { try { s.close(); } catch (e) {} if (H2 === s) H2 = null; });
   s.on('close', () => { if (H2 === s) H2 = null; });
@@ -327,28 +382,46 @@ function h2Session() {
   H2 = s;
   return s;
 }
+function h2Session() {
+  if (H2 && !H2.destroyed && !H2.closed) return Promise.resolve(H2);
+  if (H2_PENDING) return H2_PENDING;
+  H2_PENDING = buildH2().then(
+    s => { H2_PENDING = null; return s; },
+    e => { H2_PENDING = null; throw e; },
+  );
+  return H2_PENDING;
+}
 function rawGetH2(p, timeout = 25000) {
   return new Promise(resolve => {
     let done = false, rq = null;
     const fin = o => { if (done) return; done = true; clearTimeout(timer); resolve(o); };
     const timer = setTimeout(() => { try { rq && rq.close(); } catch (e) {} fin({ s: -1, d: '' }); }, timeout);
-    try {
-      rq = h2Session().request({
-        ':method': 'GET', ':path': p,
-        'user-agent': UA, accept: 'application/json',
-        'accept-language': 'ko-KR,ko;q=0.9',
-        'poca-display-language': 'ko',
-        referer: 'https://pocamarket.com/',
-        ...KHDR,
-      });
-    } catch (e) { return fin({ s: 0, d: '' }); }
-    let st = 0, d = '';
-    rq.on('response', h => { st = h[':status'] || 0; });
-    rq.setEncoding('utf8');
-    rq.on('data', c => { d += c; if (d.length > 4e6) { try { rq.close(); } catch (e) {} } });
-    rq.on('end', () => fin({ s: st, d }));
-    rq.on('error', () => fin({ s: 0, d: '' }));
-    rq.end();
+    h2Session().then(s => {
+      if (done) return;
+      try {
+        rq = s.request({
+          ':method': 'GET', ':path': p,
+          'user-agent': UA, accept: 'application/json',
+          'accept-language': 'ko-KR,ko;q=0.9',
+          'poca-display-language': 'ko',
+          referer: 'https://pocamarket.com/',
+          ...KHDR,
+        });
+      } catch (e) { return fin({ s: 0, d: '' }); }
+      let st = 0, d = '';
+      rq.on('response', h => { st = h[':status'] || 0; });
+      rq.setEncoding('utf8');
+      rq.on('data', c => { d += c; if (d.length > 4e6) { try { rq.close(); } catch (e) {} } });
+      rq.on('end', () => fin({ s: st, d }));
+      rq.on('error', () => fin({ s: 0, d: '' }));
+      rq.end();
+    }).catch(e => {
+      if (global.H2_ERR !== String(e.message)) {
+        global.H2_ERR = String(e.message);
+        console.log('  ⚠️ h2 连接失败：' + e.message);
+      }
+      fin({ s: 0, d: '' });
+    });
   });
 }
 
