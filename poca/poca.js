@@ -57,8 +57,16 @@ const KHDR = KEY ? { 'x-poca-key': KEY } : {};
 //    ⇒ 从此不需要再为了省配额降频，搜索/详情/明细全部恢复每轮全量。
 //    POCA_BATCH=0 可关掉批量（退回一对一），POCA_BATCH 调批大小（上限 40 = Worker 子请求上限内）。
 const BATCH = Math.max(1, Math.min(40, Number(process.env.POCA_BATCH) || 20));
+// ── 三级出口（2026-11-13 10:10 用户定的降级策略）──
+//   A 机房直连：不设 POCA_HOST / POCA_PROXY，Azure 出口打站方。站方放行时最快最省。
+//   B CF 中转  ：POCA_HOST=<worker>.workers.dev（+ POCA_KEY / POCA_BATCH）。白天被封时用这个。
+//   C 订阅兜底：POCA_PROXY=http://127.0.0.1:7891（runner 上起 xray，出口是她机场的韩国节点）。
+//               只在前两级都不通时启用，且 20 分钟才允许用一次（节流在 workflow 里）。
+//   每轮都先探 A、再探 B，都不通才轮到 C —— 恢复后立刻回到免费的前两级，不长期占她机场。
+// ⚠️ 走代理时必须禁批量：/__batch 只有 Worker 有，打站方就是 404。
+const PROXY = String(process.env.POCA_PROXY || '').trim();
 // 只有走中转时才批量：直连站方没有 /__batch 这个端点，硬发就是 404
-const USE_BATCH = !!process.env.POCA_HOST && String(process.env.POCA_BATCH) !== '0';
+const USE_BATCH = !PROXY && !!process.env.POCA_HOST && String(process.env.POCA_BATCH) !== '0';
 const BATCH_CONC = Math.max(1, Math.min(8, Number(process.env.POCA_BATCH_CONC) || 2));
 // 等效上游并发 = BATCH_CONC × BATCH = 2×20 = 40（原来 h2 是 16~20，实测 0 失败）
 
@@ -296,7 +304,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 //    不是接口变更、不是 IP 被墙、不是限速 —— 改 HOST 永远修不好。
 //    所以主传输换成 **http2**（顺带白赚多路复用：不用每请求新建连接，比原来的 http1 还快），
 //    拿不到就降级 http1，再不行降级 curl。POCA_HTTP=h2|http1|curl 可强制。
-let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP) ? process.env.POCA_HTTP : 'h2';
+// ⚠️ 2026-11-13：走代理（POCA_PROXY）时默认改用 curl —— node 的 h2 不支持 HTTP 代理隧道，
+//    而 curl 自带 CONNECT + ALPN 协商，且它的 TLS 指纹站方一直认（11-11 传输层矩阵实测 curl 200）。
+//    代价是每请求 spawn 一个进程，所以并发给到 16。POCA_HTTP 仍可强制覆盖。
+let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP)
+  ? process.env.POCA_HTTP
+  : (PROXY ? 'curl' : 'h2');
 let H2_RECONNECT = 0;
 let RATE_BACKOFF = 0;   // 疑似「被限速」的退避次数，成功一次就清零
 
@@ -341,6 +354,8 @@ function rawGetH2(p, timeout = 25000) {
 
 const CURL_ARGS = p => [
   '-sS', '-m', '25', '--connect-timeout', '15',
+  // 走订阅代理时把出口指到本地 xray 的 http 端口（CONNECT 隧道，TLS 端到端）
+  ...(PROXY ? ['-x', PROXY] : []),
   '-H', 'User-Agent: ' + UA,
   '-H', 'Accept: application/json',
   '-H', 'Accept-Language: ko-KR,ko;q=0.9',
@@ -714,8 +729,23 @@ const KIND_KR2EN = {
 
 (async () => {
   const t0 = Date.now();
+  // 出口模式一眼可见：direct（机房直连）/ worker（CF 中转批量）/ proxy（订阅韩国出口）
+  console.log(`出口 ${PROXY ? 'proxy ' + PROXY : HOST}` +
+    ` · 传输 ${TRANSPORT} · 批量 ${USE_BATCH ? BATCH + '路×' + BATCH_CONC : '关'} · 并发 ${CONC}`);
 
-  // 上一次的状态（价格快照 + 变动记录）
+  // --probe：只打一次搜索首页就退出，用来验证「当前这套出口/传输能不能过」。
+  //   本地排障、Actions 换出口后自检都用它，几秒钟出结果，不会碰任何数据文件。
+  if (process.argv.includes('--probe')) {
+    const j = await getJson(`/card/v3/search?q=${encodeURIComponent(Q)}`);
+    if (j && Array.isArray(j.results)) {
+      console.log(`✅ 探测通过：${j.results.length} 条结果（传输 ${TRANSPORT}）`);
+      process.exit(0);
+    }
+    console.log(`❌ 探测失败：${global.LASTGET || '无请求记录'}`);
+    process.exit(1);
+  }
+
+
   const statePath = path.join(HERE, 'state.json');
   let prevState = { at: null, snap: {}, hist: {} };
   if (fs.existsSync(statePath)) {
