@@ -204,6 +204,40 @@ function seriesOf(arc, idx, max) {
   return out.slice(-max);          // 只留最近的 max 条
 }
 
+// 速切成交价的真实观测：pchg 第 4 位（2026-11-02 起落点，11-14 起与买卖价一起参与判定）
+// 0 = 当时还没有任何速切成交，跳过不记
+function seriesOfT(arc, max) {
+  const out = [];
+  let prev = null;
+  for (const e of arc || []) {
+    const v = Number(e[3]) || 0;
+    if (v <= 0 || v === prev) continue;
+    prev = v;
+    out.push([v, String(e[0])]);
+  }
+  return out.slice(-max);
+}
+
+// 「速切价记录」= 挂着的速切卖价(q) + 最近一笔速切成交价(t) 合成一条时间线。
+// 为什么合 —— 用户要的是「这张卡速切多少钱」的完整变化史。有 234 张卡从来没有过速切挂单
+//   （q 一直 0），但确实有速切成交（t 有值），按老逻辑它们的「速切价记录」整个是空的。
+//   典型就是 293083：10-23 成交价 100000 → 11-01 变 35000（她 10-24 买的那笔），q 全程 0。
+// 同一时刻以 q 为准：还挂着单时，挂单价才是当下真能买到的价；没有挂单才用成交价补。
+// 第 3 位留来源标记 'q' / 't'，前端据此标小字，不把成交价冒充成挂单价。
+function mergeQuick(qs, ts) {
+  const by = new Map();
+  for (const p of qs) by.set(String(p[1]), [p[0], p[1], 'q']);
+  // 成交价补位规则：同一时刻 q 是 0（那会儿压根没挂单）但确实有成交价时，用成交价 ——
+  // 否则 293083 的 10-23「成交 100000」会被同刻的「无挂单」覆盖掉，白丢一个真实观测。
+  // q>0 时仍以 q 为准：还挂着单，挂单价才是当下真能买到的价。
+  for (const p of ts) {
+    const k = String(p[1]);
+    const cur = by.get(k);
+    if (!cur || !(Number(cur[0]) > 0)) by.set(k, [p[0], p[1], 't']);
+  }
+  return [...by.values()].sort((a, b) => (String(a[1]) < String(b[1]) ? -1 : 1));
+}
+
 // 最高求购的真实观测：pchg 第 5 位（2026-11-11 起才写入），0 = 当时没人求购，跳过不记
 function seriesOfBuy(arc, max) {
   const out = [];
@@ -1165,7 +1199,12 @@ const KIND_KR2EN = {
       const arc = pchg[r.id] || (pchg[r.id] = []);
       const la = arc[arc.length - 1];
       const laB = la ? (Number(la[4]) || 0) : -1;
-      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1] || laB !== b) {
+      // 速切成交价（第 4 位）也必须参与判定 —— 2026-11-14 修：
+      //   11-11 加「最高求购」那次改版把它从判断里漏了，导致「速切成交价变了但买卖挂单没变」时不留痕，
+      //   用户 10-24 买的 35000 就只剩 11-02 那条孤点，之后再也不记。
+      //   成交价一变就写一个点，成本极低（全站一天也就十几张卡会变）。
+      const laT = la ? (Number(la[3]) || 0) : -1;
+      if (!la || Number(la[1]) !== cur[0] || Number(la[2]) !== cur[1] || laT !== cur[2] || laB !== b) {
         arc.push([stamp, cur[0], cur[1], cur[2], b]);
         if (arc.length > ARCH_MAX) arc.splice(0, arc.length - ARCH_MAX);
         archAdded++;
@@ -1227,7 +1266,8 @@ const KIND_KR2EN = {
     const dc = detCarry.d[r.id];
     const arc = pchg[r.id] || [];
     const realS = seriesOf(arc, 1, REC_MAX);     // 匹配价真实观测
-    const realQ = seriesOf(arc, 2, REC_MAX);     // 速切价真实观测
+    const realQ = seriesOf(arc, 2, REC_MAX);     // 速切价（当时挂着的速切卖价）
+    const realT = seriesOfT(arc, REC_MAX);       // 速切成交价（最近一笔速切成交价）
 
     // 历史推算段只取「第一条真实观测之前」，两段不重叠、不打架
     let histS = [];
@@ -1243,7 +1283,9 @@ const KIND_KR2EN = {
     }
     const hs = [...histS, ...realS];
     if (hs.length) rec.hs = hs.slice(-REC_MAX);
-    if (realQ.length) rec.hq = realQ;
+    // 「速切价记录」= 挂单价 + 成交价合成一条时间线（见 mergeQuick 注释）
+    const hqAll = mergeQuick(realQ, realT);
+    if (hqAll.length) rec.hq = hqAll;
 
     // 最高求购：2026-11-11 起从 /card/v1/<id> 的 get_highest_buy_price 实时抓（pchg 第 5 位），
     // 前面接 11-01 前攒下的推算段（带 '~'），两段同样以「第一条真实观测」为界，不重叠。
