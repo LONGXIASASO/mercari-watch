@@ -301,7 +301,10 @@ jobs:
             if [ -z "$POCA_SUB_URL" ]; then
               REASON="NO_SUB"; DETAIL="$DETAIL ｜ 未配置 POCA_SUB_URL，跳过订阅兜底"
             else
-              LAST=$(curl -sSL -m 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt" 2>/dev/null | tr -dc '0-9')
+              # ⚠️ 别用 `tr -dc 0-9` 提取：文件不存在时 raw 返回的 404 页面里也有数字，
+              #    会把 LAST 读成 "404"（2026-11-13 实测踩过），GAP 直接算成天文数字。
+              #    只认「整行就是 10 位 epoch 秒」。
+              LAST=$(curl -sSL -m 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt" 2>/dev/null | tr -d ' \r\n' | grep -oE '^[0-9]{10}$' || true)
               NOW=$(date +%s)
               GAP=$(( NOW - ${LAST:-0} ))
               # force_mode=sub 时跳过节流（排障/验证用，正常轮次绝不会设它）
@@ -319,6 +322,12 @@ jobs:
                 if [ -s /tmp/xray.json ]; then
                   nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
                   sleep 3
+                  # 诊断：xray 到底有没有起来、走的是哪个出口 IP（2026-11-13 第一次实测
+                  # 四个端口全 404/39，疑似路由没生效直接 freedom 出了 runner IP）
+                  echo "--- xray: $(ls -l /tmp/xray/xray 2>&1 | awk '{print $1, $5}')"
+                  echo "--- xray 日志"; tail -6 /tmp/xray.log 2>/dev/null || echo "（无日志）"
+                  echo "--- :7891 出口 IP"; curl -s -m 15 -x http://127.0.0.1:7891 https://ipinfo.io/json 2>/dev/null | head -c 220 || echo "（取不到）"
+                  echo
                   for P in 7891 7892 7893 7894; do
                     CODE=$(curl -sS -m 20 -o /tmp/g.bin -w '%{http_code}' \
                       -x "http://127.0.0.1:$P" "${PH[@]}" "https://phocamarket.com$SEARCH" || echo 000)
