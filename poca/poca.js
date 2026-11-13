@@ -297,6 +297,10 @@ const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢
 //   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
 //   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
 const SKIP_DETAIL = process.argv.includes('--skip-detail');
+// 固定监控卡单独补明细（2026-11-13 18:20）：POCA_PIN_DETAIL=1 时，
+// 即使本轮是 --skip-detail，也会单独给 PINS 里的那几张抓一次「详情 + 挂单 + 成交明细」。
+// ⚠️ 这是「一次性手动」用的（workflow_dispatch 的 pin_detail=1），不要挂到定时轮上。
+const PIN_DETAIL = String(process.env.POCA_PIN_DETAIL || '') === '1';
 // --lite（2026-11-13 11:15 用户定的新节奏）：只抓「搜索 + 单卡详情」，跳过 /sell、/matching 明细。
 //   匹配价 mp / 速切价 t / 最高求购 b / 库存件数 st **全部来自单卡详情**（搜索里没有），所以 --lite 下
 //   这几个标量照常实时更新；只有「挂单明细行 ds」「成交明细行 dm」会空着，由 darc.json 里攒下的
@@ -681,7 +685,10 @@ const rowsOf = (o, max) => (o && Array.isArray(o.results))
 //   p=0 但仍有成交的 46%                        ⇒ 成交明细不能用 p 判
 //   stock=0 且 p=0 且 b=0（最冷）→ 挂单/成交/求购 全 0
 // 所以分两阶段：先拿详情（p/st/b 都在这），再按需发明细请求，省掉约 19% 的请求。
-async function fetchDetails(ids, withRows = true) {
+// forceRows（2026-11-13 18:20 加）：跳过「p>0 才抓挂单」的省请求判断，无条件抓挂单+成交。
+//   只给固定监控卡的一次性补明细用 —— 那几张老卡 p/st/b 全是 0（没人挂、没库存），
+//   按默认逻辑会当场跳过，但其实站上攒着历史成交，用户要的就是这段历史。
+async function fetchDetails(ids, withRows = true, forceRows = false) {
   const out = {};
   const pOf = {};                     // id → 匹配最低卖价，仅用于决定抓不抓明细，不落盘
   let fails = 0;
@@ -721,8 +728,8 @@ async function fetchDetails(ids, withRows = true) {
   for (const id of Object.keys(out)) {
     const r = out[id];
     const p = pOf[id] || 0;
-    const wantSell = p > 0;
-    const wantMatch = p > 0 || (r.st || 0) > 0 || (r.b || 0) > 0;
+    const wantSell = forceRows || p > 0;
+    const wantMatch = forceRows || p > 0 || (r.st || 0) > 0 || (r.b || 0) > 0;
     if (wantSell) jobs.push({ id, kind: 'sell' });
     if (wantMatch) jobs.push({ id, kind: 'match' });
   }
@@ -981,8 +988,24 @@ const KIND_KR2EN = {
     }
   }
 
-  const detail = useDetail ? await fetchDetails(ids, !LITE) : {};
+  let detail = useDetail ? await fetchDetails(ids, !LITE) : {};
   if (!useDetail) {
+    // ⚠️ 2026-11-13 18:20：固定监控卡（PINS 里的 7 张）可以单独要一次明细。
+    //    用户要求「这 6 张先各抓一遍明细，之后跟其它卡一起只抓搜索」——
+    //    所以做成一次性开关 POCA_PIN_DETAIL=1（workflow 里是 pin_detail=1），默认关。
+    //    开的时候只对这几个 id 发明细请求（7 张 × 最多 2 个 ≈ 14 个请求），
+    //    **绝不要改成全站 deep** —— 那正好是站方风控盯上的 1000+ 请求尖峰。
+    if (PIN_DETAIL && PIN_IDS.length) {
+      const pinIds = ids.filter(id => PIN_IDS.includes(String(id)));
+      if (pinIds.length) {
+        console.log(`🔎 固定监控卡单独补明细：${pinIds.join(', ')}（${pinIds.length} 张，强制抓挂单+成交）`);
+        const pd = await fetchDetails(pinIds, true, true);
+        Object.assign(detail, pd);
+        const gotS = Object.values(pd).filter(v => v.ds && v.ds.length).length;
+        const gotM = Object.values(pd).filter(v => v.dm && v.dm.length).length;
+        console.log(`  固定卡明细完成 ${Object.keys(pd).length}/${pinIds.length} 张：有挂单 ${gotS} 张 / 有成交 ${gotM} 张`);
+      }
+    }
     console.log(`详情+明细跳过（--skip-detail）；沿用上一轮 ${Object.keys(PREV_ITEMS).length} 张卡的求购/成交/库存/挂单记录`);
   } else {
     const what = LITE ? '单卡详情完成（明细行已跳过）' : '详情+明细完成';
@@ -1251,7 +1274,10 @@ const KIND_KR2EN = {
     const nowSet = new Set((dvNow && dvNow.ds ? dvNow.ds : []).map(e => `${e[0]}|${e[1]}`));
     const arcD = darc[r.id];
     const pv = PREV_DET[r.id];
-    if (pv && (pv.ds || pv.dm)) {
+    // hasNow：本轮真的抓到了明细行（只可能是 pin_detail 轮或全量轮）。
+    // 有新生数据时不能再沿用上一轮，否则刚抓的明细当场被旧数据盖掉（2026-11-13 18:20 修）。
+    const hasNow = !!(dvNow && ((dvNow.ds && dvNow.ds.length) || (dvNow.dm && dvNow.dm.length)));
+    if (pv && !hasNow && (pv.ds || pv.dm)) {
       // 跳过明细的轮次：整块沿用上一轮（第三位「仍在挂」标记保持原样，不闪烁）
       if (pv.ds && pv.ds.length) rec.ds = pv.ds;
       if (pv.dm && pv.dm.length) rec.dm = pv.dm;
