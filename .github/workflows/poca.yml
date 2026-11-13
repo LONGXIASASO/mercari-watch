@@ -45,6 +45,11 @@ on:
         required: false
         default: ''
         type: string
+      force_mode:
+        description: '手动指定出口：direct（直连）/ worker（CF 中转）/ sub（订阅，且跳过 20 分钟节流）。留空=自动三级探测'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: poca-watch
@@ -133,6 +138,22 @@ jobs:
           fetch data.prev.json "$BASE/data.json" \
             || echo "  ℹ️ 上一轮 data.json 没拿到，本轮若跳过明细会退回档案兜底"
 
+          # 订阅兜底的计时（2026-11-13）：记录「上一次用订阅抓取成功」的 epoch 秒，
+          # 预检的 ③ 阶段靠它做 20 分钟节流。缺了不影响 A/B 两级，所以只做软提示。
+          fetch_opt() {
+            local f="$1" url="$2" code
+            code=$(curl -sSL --max-time 20 -o "poca/$f" -w '%{http_code}' "$url" || true)
+            if [ "$code" = "200" ] && [ -s "poca/$f" ]; then
+              echo "  ✅ $f $(cat "poca/$f")"
+            elif [ "$code" = "404" ]; then
+              rm -f "poca/$f"; echo "  ℹ️ $f 尚不存在（本轮允许用订阅兜底）"
+            else
+              # 取不到时**保留本地**（不存在就空）→ 下一轮可能提前用订阅，可接受
+              rm -f "poca/$f"; echo "  ⚠️ $f 取不到（HTTP ${code:-timeout}）"
+            fi
+          }
+          fetch_opt subat.txt "$BASE/subat.txt"
+
           if [ -n "$HARD_FAIL" ]; then
             if [ "${{ github.event.inputs.bootstrap }}" = "1" ]; then
               echo "::warning::state/pchg 取不到（$HARD_FAIL），但 bootstrap=1，允许从零建档案"
@@ -181,136 +202,226 @@ jobs:
       - name: 出口网络自检（Node 版本 / 出口 IP / 两种 UA）
         run: node poca/_selfcheck.js
 
-      # ⚠️ 2026-11-12 16:00 起改走 Cloudflare Worker 中转（出口不再是 Azure 机房 IP）。
-      #    站方按出口 IP 归属分流：runner 直连 → 国际站后端 → 无 /card/v3 路由 → 404/39；
-      #    经 Worker 出站 → 2026-11-12 16:08 实测 search/v1/sell/matching 全 200，
-      #    verdict=PASS colo=IAD，20 并发 0 失败。
-      #    预检打的是中转而不是站方，逻辑不变：通就抓，不通静默跳过本轮。
-      - name: 通路预检（经中转探测，不通就静默跳过）
+      # ⚠️⚠️ 2026-11-13 10:10 用户定的三级降级策略（每轮都从 ① 重新探起，一恢复就回免费通道）：
+      #    ① 机房直连（Azure 出口）—— 站方放行时用它，最快最省，0 成本
+      #    ② Cloudflare 中转 —— 白天机房 IP 被拦时用它（免费额度 10 万/天，一轮 187 次）
+      #    ③ 订阅兜底（用户机场的**韩国**节点，runner 上起 Xray 做本地 http 代理）
+      #       只在前两级都不通时启用，且 **20 分钟才允许用一次**（节流靠 poca-data 上的 subat.txt）。
+      #       用完立刻 kill，下一轮照样先探 ① ②，绝不让订阅长期顶班、也不占她的设备位。
+      #    实测依据（2026-11-13 10:07）：同一时刻 CF 出口 404/39，韩国 Vultr 出口 200 有数据。
+      #    （韩国出口=首尔 Vultr，与她梯子同一台；订阅 4 节点=韩国/中继韩国/美国/中继美国，韩国排前）
+      - name: 通路预检（① 直连 → ② 中转 → ③ 订阅兜底）
         id: gate
+        env:
+          POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
+          FORCE: ${{ github.event.inputs.force_mode }}
         run: |
-          # ⚠️ 2026-11-12 17:12：Cloudflare Worker 里的 KEY 与 workflow 常量对不上过两次（403 forbidden，
-          #    体长 9 字节就是 "forbidden"），改一处不行改另一处也不行 —— 与其继续猜，
-          #    不如把候选 key 全试一遍，用通的那个，并把命中的 key 写进环境交给抓取步骤。
-          #    这样 Worker 里是哪串都能自愈；日志会打印 key=xxx → HTTP yyy，对不上时一眼看见。
-          FOUND=""
-          for K in poca_9f3k2m7xq4wzv8hd; do
-            CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/gate.bin -w '%{http_code}' \
-              -H 'Accept: application/json' -H "x-poca-key: $K" \
-              'https://poca-proxy.1140382718.workers.dev/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4' || echo 000)
-            SIZE=$(stat -c%s /tmp/gate.bin 2>/dev/null || echo 0)
-            echo "key=$K → HTTP $CODE size=$SIZE"
-            if [ "$CODE" = "200" ] && [ "$SIZE" -gt 500 ]; then FOUND="$K"; break; fi
-          done
-          GATEBODY="$(head -c 200 /tmp/gate.bin 2>/dev/null)"
-
-          # ⚠️⚠️ 响应头里的 poca-display-language / currency 只表示「展示偏好」，**不代表路由归属**。
-          #    2026-11-12 17:54 实测：Cloudflare 出口下站方判 en/USD，v3 接口照样 200 + 韩元原值
-          #    （线上 data.json：匹配价中位 4500、最高 140000，速切最高 250000，全是韩元；
-          #     pchg 既没出现跌价、也没丢历史点）。而 Azure 出口同样是 en/USD，却是 404/39。
-          #    所以**唯一判据只有「200 有数据 vs 404/39 NOT_FOUND」**，别看 language。
-          #    打印它是为了看趋势：万一哪天 v3 开始按 display currency 把韩元换算成美元，
-          #    价格会整体除以约 1350，pchg 会瞬间爆出上千条「跌价」——那时这里能对上号。
+          SEARCH='/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
+          PH=(-H 'User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)'
+              -H 'Accept: application/json'
+              -H 'Accept-Language: ko-KR,ko;q=0.9'
+              -H 'Referer: https://pocamarket.com/')
           hdr() { grep -i "^$1:" /tmp/gate.hdr 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1; }
-          LANG=$(hdr 'poca-display-language')
-          CURR=$(hdr 'poca-display-currency')
-          SRV=$(hdr 'server')
-          echo "响应头：language=${LANG:-?} currency=${CURR:-?} server=${SRV:-?}（仅供参考，不是路由判据）"
-          DETAIL="HTTP $CODE · ${SIZE} 字节 · 响应头 lang=${LANG:-?} cur=${CURR:-?}"
+          sz() { stat -c%s /tmp/g.bin 2>/dev/null || echo 0; }
+          MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
 
-          if [ -n "$FOUND" ]; then
-            echo "✅ 中转通路正常（生效 key=$FOUND）"
-            echo "ok=1" >> "$GITHUB_OUTPUT"
-            echo "GATEKEY=$FOUND" >> "$GITHUB_ENV"
-          else
-            # ⚠️ 分类必须在预检这里就分清：三种「404」的处置方式完全不同，
-            #    混成一个「挂了」后面就没法判断到底是限速（会自愈）、地区分流（要换出口）
-            #    还是我们自己的鉴权问题（改代码）。
-            #    时间型启发式，够用：体 1~2 字节 = 限速；39 字节 NOT_FOUND = 国际站后端。
-            if printf '%s' "$GATEBODY" | grep -q forbidden; then
-              REASON="AUTH"
-            elif [ "$CODE" = "000" ]; then
-              REASON="NETWORK"
-            elif [ "$SIZE" -le 2 ]; then
-              REASON="RATE_LIMIT"
-            elif printf '%s' "$GATEBODY" | grep -q NOT_FOUND; then
-              REASON="REGION"
-            elif [ "${CODE#5}" != "$CODE" ]; then
-              REASON="UPSTREAM_5XX"
-            else
-              REASON="UNKNOWN"
-            fi
-            echo "⏭ 中转不通（原因 $REASON）$DETAIL，本轮静默跳过"
-            echo "   预检体: $GATEBODY"
-            echo "ok=0" >> "$GITHUB_OUTPUT"
-            echo "SKIP=1" >> "$GITHUB_ENV"
-            echo "GATE_REASON=$REASON" >> "$GITHUB_ENV"
-            echo "GATE_DETAIL=$DETAIL" >> "$GITHUB_ENV"
-            # 我们自己代码坏了必须立刻吵，不能等 40 分钟阈值
-            if [ "$REASON" = "AUTH" ]; then
-              echo "GATE_URGENT=1" >> "$GITHUB_ENV"
-              echo "::error::Worker 鉴权失败（403 forbidden）—— Cloudflare 里的 KEYS 被改成了非空，或与 workflow 不一致"
-              exit 1
-            fi
+          # ⚠️ 响应头 poca-display-language / currency 只表示「展示偏好」，**不是路由判据**：
+          #    11-12 实测 CF 出口也是 en/USD 却 200；唯一判据只有「200 有数据 vs 404/39 NOT_FOUND」。
+          #    打印出来是为了看趋势（万一哪天开始按 display currency 折算，价格会整体除以 1350）。
+
+          # ───────── ① 机房直连 ─────────
+          CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/g.bin -w '%{http_code}' \
+            "${PH[@]}" "https://phocamarket.com$SEARCH" || echo 000)
+          DSIZE=$(sz)
+          echo "① 直连：HTTP $CODE · ${DSIZE} 字节 · lang=$(hdr poca-display-language) cur=$(hdr poca-display-currency)"
+          if [ "$CODE" = "200" ] && [ "$DSIZE" -gt 500 ]; then
+            MODE="direct"; DETAIL="直连 HTTP 200 · ${DSIZE} 字节"
           fi
 
-          # 批量端点单独验一次：这是我们自己的代码，坏了必须吵，不能静默跳过
-          # 故意用 20 个路径探 —— 和实际批大小一致，顺便验 Worker 扛不扛得住 20 个子请求
-          if [ -n "$FOUND" ]; then
-            ARR=""
-            for i in $(seq 1 20); do
-              if [ -z "$ARR" ]; then ARR='"/card/v1/436791"'; else ARR="$ARR,\"/card/v1/436791\""; fi
+          # ───────── ② Cloudflare 中转 ─────────
+          # Worker 里的 KEYS 曾经和 workflow 常量对不上（403 + 体 9 字节 forbidden），
+          # 所以候选 key 全试一遍，命中哪个用哪个，并把命中的写进环境交给抓取步骤。
+          if [ -z "$MODE" ]; then
+            for K in poca_9f3k2m7xq4wzv8hd; do
+              CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/g.bin -w '%{http_code}' \
+                -H 'Accept: application/json' -H "x-poca-key: $K" \
+                "https://poca-proxy.1140382718.workers.dev$SEARCH" || echo 000)
+              BSIZE=$(sz)
+              echo "② 中转 key=$K → HTTP $CODE · ${BSIZE} 字节"
+              if [ "$CODE" = "200" ] && [ "$BSIZE" -gt 500 ]; then FOUND="$K"; break; fi
             done
-            BCODE=$(curl -sS -m 40 -o /tmp/gate_b.bin -w '%{http_code}' \
-              -X POST -H 'Content-Type: application/json' \
-              -H "x-poca-key: $FOUND" \
-              -d "{\"ps\":[$ARR]}" \
-              'https://poca-proxy.1140382718.workers.dev/__batch' || echo 000)
-            echo "批量端点(20路) HTTP $BCODE 大小 $(stat -c%s /tmp/gate_b.bin 2>/dev/null || echo 0)"
-            echo "   体: $(head -c 160 /tmp/gate_b.bin 2>/dev/null)"
-            if [ "$BCODE" != "200" ] || ! grep -q '"r"' /tmp/gate_b.bin 2>/dev/null; then
-              # 同样是「我们自己的代码坏了」，立即告警，不等停更阈值
-              echo "GATE_URGENT=1" >> "$GITHUB_ENV"
-              echo "GATE_REASON=BATCH" >> "$GITHUB_ENV"
-              echo "GATE_DETAIL=批量端点 HTTP $BCODE" >> "$GITHUB_ENV"
-              echo "::error::批量端点 /__batch 不可用（HTTP $BCODE）—— Cloudflare Worker 需要重新粘贴带批量端点的代码"
-              exit 1
+            WBODY="$(head -c 200 /tmp/g.bin 2>/dev/null)"
+            if [ -n "$FOUND" ]; then
+              MODE="worker"; DETAIL="中转 HTTP 200 · ${BSIZE} 字节"
+              # 批量端点单独验：这是我们自己的代码，坏了必须吵（20 路探，和实际批大小一致）
+              ARR=""
+              for i in $(seq 1 20); do
+                if [ -z "$ARR" ]; then ARR='"/card/v1/436791"'; else ARR="$ARR,\"/card/v1/436791\""; fi
+              done
+              BCODE=$(curl -sS -m 40 -o /tmp/gate_b.bin -w '%{http_code}' \
+                -X POST -H 'Content-Type: application/json' -H "x-poca-key: $FOUND" \
+                -d "{\"ps\":[$ARR]}" 'https://poca-proxy.1140382718.workers.dev/__batch' || echo 000)
+              echo "批量端点(20路) HTTP $BCODE 大小 $(stat -c%s /tmp/gate_b.bin 2>/dev/null || echo 0)"
+              if [ "$BCODE" != "200" ] || ! grep -q '"r"' /tmp/gate_b.bin 2>/dev/null; then
+                echo "GATE_URGENT=1" >> "$GITHUB_ENV"
+                echo "GATE_REASON=BATCH" >> "$GITHUB_ENV"
+                echo "GATE_DETAIL=批量端点 HTTP $BCODE" >> "$GITHUB_ENV"
+                echo "::error::批量端点 /__batch 不可用（HTTP $BCODE）—— Cloudflare Worker 需要重新粘贴带批量端点的代码"
+                exit 1
+              fi
+            else
+              # 分类必须分清三种「404」：39 字节 NOT_FOUND=地区分流（换出口）、
+              # 1~2 字节空体=限速（会自愈）、403 + 9 字节 forbidden=我们自己的鉴权（改代码）
+              if printf '%s' "$WBODY" | grep -q forbidden; then
+                REASON="AUTH"
+              elif [ "$CODE" = "000" ]; then
+                REASON="NETWORK"
+              elif [ "$BSIZE" -le 2 ]; then
+                REASON="RATE_LIMIT"
+              elif printf '%s' "$WBODY" | grep -q NOT_FOUND; then
+                REASON="REGION"
+              elif [ "${CODE#5}" != "$CODE" ]; then
+                REASON="UPSTREAM_5XX"
+              else
+                REASON="UNKNOWN"
+              fi
+              DETAIL="② 中转 HTTP $CODE · ${BSIZE} 字节"
+              if [ "$REASON" = "AUTH" ]; then
+                echo "GATE_URGENT=1" >> "$GITHUB_ENV"
+                echo "GATE_REASON=AUTH" >> "$GITHUB_ENV"
+                echo "GATE_DETAIL=$DETAIL"
+                echo "::error::Worker 鉴权失败（403 forbidden）—— Cloudflare 里的 KEYS 被改成了非空，或与 workflow 不一致"
+                exit 1
+              fi
             fi
           fi
 
-      - name: 抓取 Poca
+          # ───────── ③ 订阅兜底（每 20 分钟最多一次）─────────
+          if [ -z "$MODE" ]; then
+            if [ -z "$POCA_SUB_URL" ]; then
+              REASON="NO_SUB"; DETAIL="$DETAIL ｜ 未配置 POCA_SUB_URL，跳过订阅兜底"
+            else
+              LAST=$(curl -sSL -m 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt" 2>/dev/null | tr -dc '0-9')
+              NOW=$(date +%s)
+              GAP=$(( NOW - ${LAST:-0} ))
+              # force_mode=sub 时跳过节流（排障/验证用，正常轮次绝不会设它）
+              if [ "$FORCE" != "sub" ] && [ -n "$LAST" ] && [ "$GAP" -lt 1200 ]; then
+                REASON="SUB_THROTTLE"
+                DETAIL="$DETAIL ｜ 距上次订阅抓取 $((GAP / 60)) 分钟 < 20，本轮只探测不用订阅"
+              else
+                echo "③ 订阅兜底：准备 Xray（上次订阅抓取 ${LAST:-无}）"
+                if [ ! -x /tmp/xray/xray ]; then
+                  curl -sSL -m 180 -o /tmp/xray.zip \
+                    'https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip'
+                  mkdir -p /tmp/xray && unzip -oq /tmp/xray.zip -d /tmp/xray
+                fi
+                node poca/_sub2xray.js --out /tmp/xray.json || true
+                if [ -s /tmp/xray.json ]; then
+                  nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
+                  sleep 3
+                  for P in 7891 7892 7893 7894; do
+                    CODE=$(curl -sS -m 20 -o /tmp/g.bin -w '%{http_code}' \
+                      -x "http://127.0.0.1:$P" "${PH[@]}" "https://phocamarket.com$SEARCH" || echo 000)
+                    PSIZE=$(sz)
+                    echo "③ 订阅 :$P → HTTP $CODE · ${PSIZE} 字节"
+                    if [ "$CODE" = "200" ] && [ "$PSIZE" -gt 500 ]; then
+                      PROXYURL="http://127.0.0.1:$P"; MODE="sub"
+                      DETAIL="订阅 :$P HTTP 200 · ${PSIZE} 字节"
+                      break
+                    fi
+                  done
+                  # 探测完就关：抓取步骤会按同一份配置重新拉起，不依赖跨 step 的常驻进程
+                  pkill -f '/tmp/xray/xray' 2>/dev/null || true
+                fi
+                if [ -z "$MODE" ]; then
+                  REASON="SUB_FAIL"; DETAIL="$DETAIL ｜ 订阅节点全不通"
+                fi
+              fi
+            fi
+          fi
+
+          # ───────── 结论 ─────────
+          echo "响应头：language=$(hdr poca-display-language) currency=$(hdr poca-display-currency) server=$(hdr server)"
+          if [ -n "$MODE" ]; then
+            echo "✅ 本轮出口：$MODE（$DETAIL）"
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+            echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+            echo "proxy=$PROXYURL" >> "$GITHUB_OUTPUT"
+            echo "GATE_MODE=$MODE" >> "$GITHUB_ENV"
+            if [ -n "$FOUND" ]; then echo "GATEKEY=$FOUND" >> "$GITHUB_ENV"; fi
+            if [ -n "$PROXYURL" ]; then echo "GATE_PROXY=$PROXYURL" >> "$GITHUB_ENV"; fi
+            if [ "$MODE" = "sub" ]; then
+              echo "::warning::本轮机房直连+CF 中转都不通，已启用订阅兜底（20 分钟内不会再用）"
+            fi
+          else
+            echo "⏭ 三级出口全不通（原因 ${REASON:-UNKNOWN}）$DETAIL，本轮静默跳过"
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "GATE_REASON=${REASON:-UNKNOWN}" >> "$GITHUB_ENV"
+            echo "GATE_DETAIL=$DETAIL" >> "$GITHUB_ENV"
+          fi
+
+      - name: 抓取 Poca（按预检结果选出口）
         if: steps.gate.outputs.ok == '1'
         env:
           POCA_Q: 장하오
-          POCA_CONC: '16'
-          # 走 Cloudflare Worker 中转，绕开 Azure 机房 IP 被判「国际站」
-          POCA_HOST: poca-proxy.1140382718.workers.dev
-          # POCA_KEY 不写死：由预检步骤探测出的 GATEKEY 提供（见上面 key 兼容逻辑）
-          # 批量：一次 Worker 请求取 20 个接口 → 配额按批算，不按接口算
-          POCA_BATCH: '20'
-          POCA_BATCH_CONC: '2'     # 同时在飞的批数 → 等效上游并发 40
+          # 出口不在这里写死：① 直连 / ② 中转 / ③ 订阅，由预检步骤决定后传进来
+          GATE_MODE: ${{ steps.gate.outputs.mode }}
+          GATE_PROXY: ${{ steps.gate.outputs.proxy }}
         run: |
-          export POCA_KEY="$GATEKEY"
-          # ✅ 2026-11-12 17:00 起：批量取把配额消耗降了 13 倍，**每轮全量，不再降频**。
-          #    一轮 = 搜索 65 + 固定卡 3 + 详情 52 + 明细 67 ≈ 187 次 Worker 请求
-          #    （2026 个上游接口调用被压进 119 次 Worker 请求里）。
-          #    10 分钟一轮跑满一天 = 144 × 187 ≈ 2.7 万，免费额度 10 万里余量七成。
-          #    --fast / POCA_DEEP_GAP 那套「快跑轮+每小时完整轮」的分工已经全部删掉。
-          #
+          # ── 并发按出口给，别再一刀切 ──
+          # ① 直连：h2 多路复用，搜索页并发 >8 会被站方限速（返回 404 空体）
+          # ② 中转：批量 20 路 × 2 批在飞 = 等效上游 40 并发，搜索用 16
+          # ③ 订阅：curl 每请求一个进程（走本地 xray 的 CONNECT 隧道），所以禁批量，搜索并发 8
+          case "$GATE_MODE" in
+            worker)
+              export POCA_HOST=poca-proxy.1140382718.workers.dev
+              export POCA_KEY="$GATEKEY"
+              export POCA_BATCH=20
+              export POCA_BATCH_CONC=2
+              export POCA_CONC=16
+              ;;
+            sub)
+              # ⚠️ 预检那次起的 xray 已经 kill 掉了（不赌「后台进程能跨 step 存活」），这里按同一份
+              #    /tmp/xray.json 重新拉起；起好再抓，抓完立刻关，绝不留后台连接占她的设备位。
+              if [ ! -s /tmp/xray.json ]; then
+                echo "::error::/tmp/xray.json 没了，订阅出口起不来"
+                exit 1
+              fi
+              nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
+              PORT="${GATE_PROXY##*:}"
+              for i in $(seq 1 30); do
+                (echo > /dev/tcp/127.0.0.1/"$PORT") >/dev/null 2>&1 && break
+                sleep 0.5
+              done
+              export POCA_PROXY="$GATE_PROXY"
+              export POCA_BATCH=0        # 站方没有 /__batch，走代理必须关批量
+              export POCA_CONC=8
+              echo "订阅出口就绪：$POCA_PROXY"
+              ;;
+            *)
+              export POCA_CONC=8
+              ;;
+          esac
+          echo "出口模式=$GATE_MODE · POCA_HOST=${POCA_HOST:-phocamarket.com} · POCA_PROXY=${POCA_PROXY:-无}"
+
           # ⚠️ --min-gap = 2（2026-11-12 18:45 用户指定，原为 5；历史上绝不能回到 8）：
           #    计时起点是**上一轮抓取写完盘的时刻**（state.json 的 at，不是开始时间）。
-          #    2026-11-12 18:30 关掉 GitHub cron 后只剩 cron-job.org 一条触发源，
-          #    这个值纯粹是「防同一次调度重复进来」的保险：
-          #    手动触发、cron-job.org 重试、连点两次，间隔都在 0~1 分钟，2 分钟足够挡。
-          #    正常 10 分钟节奏：一轮 70~90s → 实际间隔约 8.5~8.9 分钟，远大于 2，不会误伤。
-          #    教训：原来设 8 会周期性把**正常的定时轮**一起吞掉（#2477 距上一轮跑完 7.9 分钟 < 8
-          #    被判「撞车」跳过，实际变成 20 分钟一更）。**别再加回去。**
-          #    （日志里会打印「距上次成功 X 分钟 < 2，本轮跳过」，看到 X 接近 9 就说明正常。）
+          #    这个值纯粹是「防同一次调度重复进来」的保险：手动触发、cron-job.org 重试、
+          #    连点两次，间隔都在 0~1 分钟，2 分钟足够挡。正常 10 分钟节奏一轮 70~90s，
+          #    实际间隔约 8.5 分钟，远大于 2，不会误伤。设 8 会周期性吞掉正常定时轮。
+          set +e
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
             node poca/poca.js --min-gap 2 --skip-wish
           else
             node poca/poca.js --min-gap 2
           fi
+          RC=$?
+          set -e
+          # 订阅模式无论成败都立刻关代理
+          if [ "$GATE_MODE" = "sub" ]; then pkill -f '/tmp/xray/xray' 2>/dev/null || true; fi
+          exit $RC
 
       - name: 确认产物
         run: |
@@ -361,6 +472,15 @@ jobs:
           if [ -f poca/pchg.json ]; then cp poca/pchg.json /tmp/pub/; fi
           # 永久明细档案：同样单独文件，只增不减
           if [ -f poca/darc.json ]; then cp poca/darc.json /tmp/pub/; fi
+          # 订阅兜底计时：本轮真用了订阅就刷新，否则沿用旧值（poca-data 每轮 force push，
+          # 不带就会被冲掉，下次节流就失效了）
+          if [ "$GATE_MODE" = "sub" ]; then
+            date +%s > /tmp/pub/subat.txt
+            echo "订阅兜底计时刷新 → $(cat /tmp/pub/subat.txt)"
+          elif [ -f poca/subat.txt ]; then
+            cp poca/subat.txt /tmp/pub/
+            echo "订阅兜底计时沿用 → $(cat /tmp/pub/subat.txt)"
+          fi
           cd /tmp/pub
           git init -q -b poca-data
           git config user.name "poca-watch-bot"
