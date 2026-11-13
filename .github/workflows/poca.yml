@@ -283,26 +283,12 @@ jobs:
             fi
           fi
 
-          # ───────── ③ 订阅兜底（每 20 分钟最多一次）─────────
+          # ───────── ③ 订阅兜底（2026-11-13 取消 20 分钟节流，与其他轮同一节奏）─────────
           if [ -z "$MODE" ]; then
             if [ -z "$POCA_SUB_URL" ]; then
               REASON="NO_SUB"; DETAIL="$DETAIL ｜ 未配置 POCA_SUB_URL，跳过订阅兜底"
             else
-              # ⚠️ 别用 `tr -dc 0-9` 提取：文件不存在时 raw 返回的 404 页面里也有数字，
-              #    会把 LAST 读成 "404"（2026-11-13 实测踩过）。只认「整行 10 位 epoch 秒」。
-              # ⚠️ CDN 缓存坑（2026-11-13 实测）：raw.githubusercontent 有最长约 5 分钟的边缘缓存，
-              #    读到旧值会让「距上次订阅抓取」算大，导致订阅被提前放行、烧流量。加 cache-buster 绕过。
-              LAST=$(curl -sSL -m 20 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
-                "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt?_cb=$(date +%s%N)" \
-                2>/dev/null | tr -d ' \r\n' | grep -oE '^[0-9]{10}$' || true)
-              NOW=$(date +%s)
-              GAP=$(( NOW - ${LAST:-0} ))
-              # force_mode=sub 时跳过节流（排障/验证用，正常轮次绝不会设它）
-              if [ "$FORCE" != "sub" ] && [ -n "$LAST" ] && [ "$GAP" -lt 1200 ]; then
-                REASON="SUB_THROTTLE"
-                DETAIL="$DETAIL ｜ 距上次订阅抓取 $((GAP / 60)) 分钟 < 20，本轮只探测不用订阅"
-              else
-                echo "③ 订阅兜底：准备 Xray（上次订阅抓取 ${LAST:-无}）"
+              echo "③ 订阅兜底：准备 Xray"
                 if [ ! -x /tmp/xray/xray ]; then
                   curl -sSL -m 180 -o /tmp/xray.zip \
                     'https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip'
@@ -326,7 +312,6 @@ jobs:
                 if [ -z "$MODE" ]; then
                   REASON="SUB_FAIL"; DETAIL="$DETAIL ｜ 订阅节点全不通"
                 fi
-              fi
             fi
           fi
 
@@ -405,11 +390,25 @@ jobs:
           #    这个值纯粹是「防同一次调度重复进来」的保险：手动触发、cron-job.org 重试、
           #    连点两次，间隔都在 0~1 分钟，2 分钟足够挡。正常 10 分钟节奏一轮 70~90s，
           #    实际间隔约 8.5 分钟，远大于 2，不会误伤。设 8 会周期性吞掉正常定时轮。
+          # 2026-11-13 11:15 用户定的新节奏：
+          #   常规轮（每 10 分钟）= --lite：只抓「搜索 + 单卡详情」，跳过挂单(/sell)、成交(/matching) 明细
+          #                          → 匹配价 / 速切价 / 最高求购 / 库存件数 照常更新，请求量 2422 → 1102（-54%）
+          #   每日 0 点轮 = 全量：把挂单明细、成交明细补一次（这两块每天更新一次够用）
+          # ⚠️ 触发时刻是每小时 :09 :19 … ，所以「0 点轮」= 00:09 那一轮（HOUR=00 且 MIN<20）。
+          HOUR=$(TZ=Asia/Shanghai date +%H)
+          MIN=$(TZ=Asia/Shanghai date +%M)
+          if [ "$HOUR" = "00" ] && [ "$MIN" -lt 20 ]; then
+            LITE_ARGS=""
+            echo "📅 0 点轮：抓全量（含挂单/成交明细）"
+          else
+            LITE_ARGS="--lite"
+            echo "⚡ 常规轮：--lite（只搜索 + 单卡详情，明细留到 0 点）"
+          fi
           set +e
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
-            node poca/poca.js --min-gap 2 --skip-wish
+            node poca/poca.js --min-gap 2 $LITE_ARGS --skip-wish
           else
-            node poca/poca.js --min-gap 2
+            node poca/poca.js --min-gap 2 $LITE_ARGS
           fi
           RC=$?
           set -e
