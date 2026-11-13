@@ -1,0 +1,25 @@
+name: probe-win（一次性诊断：Windows runner 的 TLS 指纹能否过站方）
+
+# 用途：验证「换 windows-latest runner + Windows Schannel curl」能否绕过
+#       2026-11-13 13:10 出现的 TLS 指纹校验。
+# 只做探测，不写数据、不碰 poca-data 分支。跑完看日志即可，验完可删。
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 客户端矩阵诊断
+        shell: bash
+        env:
+          POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
+        run: bash poca/_probe_win.sh
