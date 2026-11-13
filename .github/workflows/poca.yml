@@ -207,35 +207,27 @@ jobs:
       #    ② Cloudflare 中转 —— 白天机房 IP 被拦时用它（免费额度 10 万/天，一轮 187 次）
       #    ③ 订阅兜底（用户机场的**韩国**节点，runner 上起 Xray 做本地 http 代理）
       #       只在前两级都不通时启用，且 **20 分钟才允许用一次**（节流靠 poca-data 上的 subat.txt）。
-      #       用完立刻 kill，下一轮照样先探 ① ②，绝不让订阅长期顶班、也不占她的设备位。
-      #    实测依据（2026-11-13 10:07）：同一时刻 CF 出口 404/39，韩国 Vultr 出口 200 有数据。
-      #    （韩国出口=首尔 Vultr，与她梯子同一台；订阅 4 节点=韩国/中继韩国/美国/中继美国，韩国排前）
+      #       用完立刻 kill，下一轮照样先探 ① ②，绝不让订阅长期顶班、也不多占她的设备位。
+      # ⚠️⚠️ 探测**一律用 node poca/poca.js --probe**，不用 curl：
+      #    2026-11-13 实测，Actions 的 Ubuntu curl 经韩国节点出去仍是 404/39（TLS/HTTP2 指纹被判），
+      #    而同一个节点、同一个 IP，用 node+h2 出去就是 200。探测客户端必须和抓取客户端一致，
+      #    否则会误判「这条出口不通」，把好好的通道白白跳过。
       - name: 通路预检（① 直连 → ② 中转 → ③ 订阅兜底）
         id: gate
         env:
           POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
           FORCE: ${{ github.event.inputs.force_mode }}
         run: |
-          SEARCH='/card/v3/search?q=%EC%9E%A5%ED%95%98%EC%98%A4'
-          PH=(-H 'User-Agent: PocaMarket/2.7.4 (iPhone; iOS 18.0)'
-              -H 'Accept: application/json'
-              -H 'Accept-Language: ko-KR,ko;q=0.9'
-              -H 'Referer: https://pocamarket.com/')
-          hdr() { grep -i "^$1:" /tmp/gate.hdr 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1; }
-          sz() { stat -c%s /tmp/g.bin 2>/dev/null || echo 0; }
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
-
-          # ⚠️ 响应头 poca-display-language / currency 只表示「展示偏好」，**不是路由判据**：
-          #    11-12 实测 CF 出口也是 en/USD 却 200；唯一判据只有「200 有数据 vs 404/39 NOT_FOUND」。
-          #    打印出来是为了看趋势（万一哪天开始按 display currency 折算，价格会整体除以 1350）。
+          probe() { node poca/poca.js --probe > /tmp/probe.out 2>&1; }
+          lastline() { tail -1 /tmp/probe.out | sed 's/^ *//'; }
 
           # ───────── ① 机房直连 ─────────
-          CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/g.bin -w '%{http_code}' \
-            "${PH[@]}" "https://phocamarket.com$SEARCH" || echo 000)
-          DSIZE=$(sz)
-          echo "① 直连：HTTP $CODE · ${DSIZE} 字节 · lang=$(hdr poca-display-language) cur=$(hdr poca-display-currency)"
-          if [ "$CODE" = "200" ] && [ "$DSIZE" -gt 500 ]; then
-            MODE="direct"; DETAIL="直连 HTTP 200 · ${DSIZE} 字节"
+          if probe; then
+            MODE="direct"; DETAIL="直连 $(lastline)"
+            echo "① 直连：$(lastline)"
+          else
+            echo "① 直连：$(lastline)"
           fi
 
           # ───────── ② Cloudflare 中转 ─────────
@@ -243,16 +235,13 @@ jobs:
           # 所以候选 key 全试一遍，命中哪个用哪个，并把命中的写进环境交给抓取步骤。
           if [ -z "$MODE" ]; then
             for K in poca_9f3k2m7xq4wzv8hd; do
-              CODE=$(curl -sS -m 20 -D /tmp/gate.hdr -o /tmp/g.bin -w '%{http_code}' \
-                -H 'Accept: application/json' -H "x-poca-key: $K" \
-                "https://poca-proxy.1140382718.workers.dev$SEARCH" || echo 000)
-              BSIZE=$(sz)
-              echo "② 中转 key=$K → HTTP $CODE · ${BSIZE} 字节"
-              if [ "$CODE" = "200" ] && [ "$BSIZE" -gt 500 ]; then FOUND="$K"; break; fi
+              if POCA_HOST=poca-proxy.1140382718.workers.dev POCA_KEY="$K" POCA_BATCH=0 probe; then
+                FOUND="$K"; echo "② 中转 key=$K：$(lastline)"; break
+              fi
+              echo "② 中转 key=$K：$(lastline)"
             done
-            WBODY="$(head -c 200 /tmp/g.bin 2>/dev/null)"
             if [ -n "$FOUND" ]; then
-              MODE="worker"; DETAIL="中转 HTTP 200 · ${BSIZE} 字节"
+              MODE="worker"; DETAIL="中转 $(lastline)"
               # 批量端点单独验：这是我们自己的代码，坏了必须吵（20 路探，和实际批大小一致）
               ARR=""
               for i in $(seq 1 20); do
@@ -270,22 +259,20 @@ jobs:
                 exit 1
               fi
             else
-              # 分类必须分清三种「404」：39 字节 NOT_FOUND=地区分流（换出口）、
-              # 1~2 字节空体=限速（会自愈）、403 + 9 字节 forbidden=我们自己的鉴权（改代码）
-              if printf '%s' "$WBODY" | grep -q forbidden; then
+              # 三种「不像 200」必须分清：404/39 NOT_FOUND=地区分流（换出口）、
+              # 404 或 409 + 1~2 字节空体=限速（会自愈）、403 + 9 字节 forbidden=我们自己的鉴权（改代码）
+              DETAIL="② 中转 $(lastline)"
+              if grep -q '403/9' /tmp/probe.out; then
                 REASON="AUTH"
-              elif [ "$CODE" = "000" ]; then
-                REASON="NETWORK"
-              elif [ "$BSIZE" -le 2 ]; then
-                REASON="RATE_LIMIT"
-              elif printf '%s' "$WBODY" | grep -q NOT_FOUND; then
+              elif grep -q '404/39' /tmp/probe.out; then
                 REASON="REGION"
-              elif [ "${CODE#5}" != "$CODE" ]; then
-                REASON="UPSTREAM_5XX"
+              elif grep -qE '(404|429)/(1|2)\[|(404|429)/(1|2)$' /tmp/probe.out; then
+                REASON="RATE_LIMIT"
+              elif grep -qE ' → 0/| → -1/' /tmp/probe.out; then
+                REASON="NETWORK"
               else
                 REASON="UNKNOWN"
               fi
-              DETAIL="② 中转 HTTP $CODE · ${BSIZE} 字节"
               if [ "$REASON" = "AUTH" ]; then
                 echo "GATE_URGENT=1" >> "$GITHUB_ENV"
                 echo "GATE_REASON=AUTH" >> "$GITHUB_ENV"
@@ -302,8 +289,7 @@ jobs:
               REASON="NO_SUB"; DETAIL="$DETAIL ｜ 未配置 POCA_SUB_URL，跳过订阅兜底"
             else
               # ⚠️ 别用 `tr -dc 0-9` 提取：文件不存在时 raw 返回的 404 页面里也有数字，
-              #    会把 LAST 读成 "404"（2026-11-13 实测踩过），GAP 直接算成天文数字。
-              #    只认「整行就是 10 位 epoch 秒」。
+              #    会把 LAST 读成 "404"（2026-11-13 实测踩过）。只认「整行 10 位 epoch 秒」。
               LAST=$(curl -sSL -m 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt" 2>/dev/null | tr -d ' \r\n' | grep -oE '^[0-9]{10}$' || true)
               NOW=$(date +%s)
               GAP=$(( NOW - ${LAST:-0} ))
@@ -322,22 +308,13 @@ jobs:
                 if [ -s /tmp/xray.json ]; then
                   nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
                   sleep 3
-                  # 诊断：xray 到底有没有起来、走的是哪个出口 IP（2026-11-13 第一次实测
-                  # 四个端口全 404/39，疑似路由没生效直接 freedom 出了 runner IP）
-                  echo "--- xray: $(ls -l /tmp/xray/xray 2>&1 | awk '{print $1, $5}')"
-                  echo "--- xray 日志"; tail -6 /tmp/xray.log 2>/dev/null || echo "（无日志）"
-                  echo "--- :7891 出口 IP"; curl -s -m 15 -x http://127.0.0.1:7891 https://ipinfo.io/json 2>/dev/null | head -c 220 || echo "（取不到）"
-                  echo
                   for P in 7891 7892 7893 7894; do
-                    CODE=$(curl -sS -m 20 -o /tmp/g.bin -w '%{http_code}' \
-                      -x "http://127.0.0.1:$P" "${PH[@]}" "https://phocamarket.com$SEARCH" || echo 000)
-                    PSIZE=$(sz)
-                    echo "③ 订阅 :$P → HTTP $CODE · ${PSIZE} 字节"
-                    if [ "$CODE" = "200" ] && [ "$PSIZE" -gt 500 ]; then
-                      PROXYURL="http://127.0.0.1:$P"; MODE="sub"
-                      DETAIL="订阅 :$P HTTP 200 · ${PSIZE} 字节"
+                    if POCA_PROXY="http://127.0.0.1:$P" probe; then
+                      PROXYURL="http://127.0.0.1:$P"; MODE="sub"; DETAIL="订阅 :$P $(lastline)"
+                      echo "③ 订阅 :$P：$(lastline)"
                       break
                     fi
+                    echo "③ 订阅 :$P：$(lastline)"
                   done
                   # 探测完就关：抓取步骤会按同一份配置重新拉起，不依赖跨 step 的常驻进程
                   pkill -f '/tmp/xray/xray' 2>/dev/null || true
@@ -350,7 +327,6 @@ jobs:
           fi
 
           # ───────── 结论 ─────────
-          echo "响应头：language=$(hdr poca-display-language) currency=$(hdr poca-display-currency) server=$(hdr server)"
           if [ -n "$MODE" ]; then
             echo "✅ 本轮出口：$MODE（$DETAIL）"
             echo "ok=1" >> "$GITHUB_OUTPUT"
@@ -360,7 +336,7 @@ jobs:
             if [ -n "$FOUND" ]; then echo "GATEKEY=$FOUND" >> "$GITHUB_ENV"; fi
             if [ -n "$PROXYURL" ]; then echo "GATE_PROXY=$PROXYURL" >> "$GITHUB_ENV"; fi
             if [ "$MODE" = "sub" ]; then
-              echo "::warning::本轮机房直连+CF 中转都不通，已启用订阅兜底（20 分钟内不会再用）"
+              echo "::warning::本轮机房直连 + CF 中转都不通，已启用订阅兜底（20 分钟内不会再用）"
             fi
           else
             echo "⏭ 三级出口全不通（原因 ${REASON:-UNKNOWN}）$DETAIL，本轮静默跳过"
@@ -382,7 +358,8 @@ jobs:
           # ── 并发按出口给，别再一刀切 ──
           # ① 直连：h2 多路复用，搜索页并发 >8 会被站方限速（返回 404 空体）
           # ② 中转：批量 20 路 × 2 批在飞 = 等效上游 40 并发，搜索用 16
-          # ③ 订阅：curl 每请求一个进程（走本地 xray 的 CONNECT 隧道），所以禁批量，搜索并发 8
+          # ③ 订阅：node h2 + 自建 CONNECT 隧道（不能用 curl，它的指纹会被站方丢回旧后端），
+          #    站方没有 /__batch，所以禁批量；h2 单连接复用，搜索并发 8、明细 12
           case "$GATE_MODE" in
             worker)
               export POCA_HOST=poca-proxy.1140382718.workers.dev
