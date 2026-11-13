@@ -312,12 +312,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 //    不是接口变更、不是 IP 被墙、不是限速 —— 改 HOST 永远修不好。
 //    所以主传输换成 **http2**（顺带白赚多路复用：不用每请求新建连接，比原来的 http1 还快），
 //    拿不到就降级 http1，再不行降级 curl。POCA_HTTP=h2|http1|curl 可强制。
-// ⚠️ 2026-11-13：走代理（POCA_PROXY）时**仍然用 h2**，只是把连接换成「CONNECT 隧道 + TLS(h2)」。
-//    不能用 curl 兜底：实测 Actions 的 Ubuntu curl 经同一个韩国节点出去仍是 404/39，
-//    指纹一换就被丢回旧后端；node h2 的指纹才是站方放行的那一档。
+// ⚠️ 2026-11-13 15:00 **再次反转**（这条结论已经来回三次，以最新实测为准）：
+//    站方从 13:10 起开始校验客户端 TLS 指纹。同一出口 64.176.234.49（Vultr 首尔）实测：
+//      curl      → HTTP 200 / 7784 字节  ✅
+//      node + h2 → 404/39 NOT_FOUND     ❌
+//    ⇒ 走代理（POCA_PROXY）默认改成 curl。之前「Actions 的 curl 也 404」是因为 xray 没起好、
+//      请求实际从 Azure 直连出去了（隧道没走成），不是 curl 指纹的问题。
+//    ⇒ 现在常规轮只抓 65 页搜索，curl 每请求 spawn 一个进程完全扛得住（并发 8 约 10 秒）。
 let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP)
   ? process.env.POCA_HTTP
-  : 'h2';
+  : (PROXY ? 'curl' : 'h2');
 let H2_RECONNECT = 0;
 let RATE_BACKOFF = 0;   // 疑似「被限速」的退避次数，成功一次就清零
 
