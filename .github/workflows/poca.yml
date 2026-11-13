@@ -48,12 +48,12 @@ on:
         default: ''
         type: string
       force_mode:
-        description: '手动指定出口：direct（直连）/ worker（CF 中转）/ sub（订阅，且跳过 20 分钟节流）。留空=自动三级探测'
+        description: '手动指定出口：direct（直连）/ worker（CF 中转）/ sub（订阅）。留空=自动三级探测'
         required: false
         default: ''
         type: string
       runner:
-        description: '⚠️ 一般留空。默认 windows-latest（2026-11-13 15:20 起，Linux 的 curl 被站方判 404）。填 ubuntu-latest 仅用于紧急回退'
+        description: '⚠️ 一般留空。默认 ubuntu-latest（2026-11-13 15:55 切回）。填 windows-latest 用于 Ubuntu 的 curl 又被判 404 时紧急回退'
         required: false
         default: ''
         type: string
@@ -72,18 +72,23 @@ permissions:
 
 jobs:
   watch:
-    # ⚠️⚠️ 2026-11-13 15:20 起换成 windows-latest（原 ubuntu-latest）。
-    #    原因：站方 13:10 起按**客户端 TLS 指纹**分流，同一个韩国节点（64.176.234.49）实测：
-    #      Windows Schannel curl → 200 · Git Bash 的 libcurl → 200
-    #      node 内置 http2       → 404/39 NOT_FOUND
-    #      Ubuntu 的 OpenSSL curl → 404/39（#2626 客户端矩阵实测）
-    #    ⇒ 传输层必须用 curl，且 Actions 侧必须多一层 `POCA_HTTP=curl`。
-    #    ⇒ Windows runner 上 Git Bash 的 curl（/ucrt64/bin/curl）实测 200，已够用。
-    #    保留 runner 输入只是为了紧急回退，正常轮次留空即可。
-    runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
+    # ⚠️⚠️ 2026-11-13 15:55 切回 ubuntu-latest（当天 15:20 曾换成 windows-latest，现在撤回）。
+    #    撤回理由 —— 那 35 分钟的「换 OS 就好了」是误读，变量一直是**客户端**不是操作系统：
+    #      13:10 事故时 Ubuntu runner 上用 node 内置 http2 探测 → 404/39
+    #      15:20 换到 Windows 后顺手把传输层改成 curl → 200
+    #    两个变量同时变了，我错把「客户端不同」当成「OS 不同」。事后六组合矩阵单独验过：
+    #      同一韩国节点 64.176.234.49，Windows Schannel curl → 200、Git Bash libcurl → 200、
+    #      node 内置 http2 → 404/39。**没有任何一组能证明操作系统是变量。**
+    #    ⇒ 真正要守住的只有一条：全链路 `POCA_HTTP=curl`（见下面抓取段）。
+    #    ⇒ 换回 Ubuntu 的收益：单轮 170s → 80~90s（Windows 每次要多装一遍 sharp、启动也慢），
+    #      且 Windows 计费两倍（仓库公开不限量，这条只是不浪费）。
+    #    ⚠️ 下面的平台适配代码（xray.exe / taskkill / RUNNER_OS 判断）**故意保留**：
+    #      Linux 上走 Linux 分支，无副作用；真遇到 Ubuntu 的 curl 又被判 404 时，
+    #      runner 输入填 windows-latest 就能一键回退，不用再改代码。
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
     timeout-minutes: 20
-    # Windows runner 默认 shell 是 pwsh，下面全是 bash 脚本，所以统一指定。
-    # （bash 由 Git for Windows 提供，与 _probe_win.sh 验证过的同一个）
+    # 统一 bash：Windows runner 默认是 pwsh，而下面全是 bash 脚本。
+    # Linux runner 本来就是 bash，这行等于没写，留着是为了回退时不漏。
     defaults:
       run:
         shell: bash
@@ -248,8 +253,10 @@ jobs:
           POCA_Q: 장하오
         run: |
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
-          # ── 平台适配（2026-11-13 15:20 换 windows-latest）──
+          # ── 平台适配（2026-11-13 15:20 为 windows-latest 写的，15:55 切回 ubuntu 后**故意保留**）──
           # xray 可执行文件在 Windows 上带 .exe；关进程不能用 pkill（Git Bash 里没有）。
+          # Linux 上 RUNNER_OS=Linux，所有判断都走 else 分支，与切回前完全一致，无副作用。
+          # 留着是为了「runner 填 windows-latest 一键回退」时不用再改代码。
           if [ "${RUNNER_OS:-Linux}" = "Windows" ]; then XRAY=/tmp/xray/xray.exe; else XRAY=/tmp/xray/xray; fi
           XRAY_PID=""
           xray_stop() {
