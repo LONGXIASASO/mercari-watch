@@ -81,7 +81,20 @@ const Q = process.env.POCA_Q || '장하오';
 // ⚠️ 2026-11-02 改版后 v3 没有任何单卡接口（/card/v3/<id> 等全部 404），
 //    只能「用卡名+成员当关键词再搜一遍，按 id 命中」。所以支持 `id:搜索词` 写法：
 //    POCA_PIN="436791:MAKESTAR 리키"  →  主搜索没有就单独搜这个词
-const PINS = String(process.env.POCA_PIN || '436791:MAKESTAR 리키')
+// ⚠️ 2026-11-13 18:20：再补 6 张 RICKY 的卡（用户从 App 分享的短链，已解析成 id）。
+//    这 6 张的卡名跟关键词差太远，配搜索词也捞不到（实测 BEATROAD / Counting Stars /
+//    KPOP STORE 三个词都 0 命中，只有 MAGNETIC CARD CASE 能搜到 455553），
+//    所以给 fetchPinned 加了「按 id 直打 /card/v1/<id>」的兜底 —— 不配搜索词也能工作。
+//    ⇒ 以后加卡只需要写 id，`:搜索词` 变成可选项。
+//    短链对照（原始分享链接 → id）：
+//      app.phocamarket.com/x0dedoc → 477376  Sequence 01: Curiosity BEATROAD LUCKY DRAW (AND2BLE)
+//      app.phocamarket.com/z18xqc0 → 236079  2024 ZB1 FAN-CON IN JAPAN PURCHASE REWARD
+//      app.phocamarket.com/vs9yiep → 290389  You had me at HELLO Counting Stars
+//      app.phocamarket.com/p95iazh → 286098  You had me at HELLO Counting Stars（另一个版本）
+//      app.phocamarket.com/r32ua8q → 478988  Sequence 01: Curiosity KPOP STORE (AND2BLE)
+//      app.phocamarket.com/2mm01qg → 455553  2026 ZB1 WORLD TOUR ENCORE IN SEOUL MAGNETIC CARD CASE
+const PINS = String(process.env.POCA_PIN
+  || '436791:MAKESTAR 리키,477376,236079,290389,286098,478988,455553')
   .split(',').map(s => s.trim()).filter(Boolean)
   .map(s => {
     const i = s.indexOf(':');
@@ -779,7 +792,30 @@ async function searchOneById(q, id, maxPages = 10) {
 }
 
 // ── 固定监控卡补抓 ──
-// v3 没有单卡接口，先看主搜索有没有，没有就用配置的搜索词再单独捞一遍。
+// 两条路：
+//   ① 配了搜索词 → 用关键词翻页找 id（老办法，能命中就走这条，字段最原汁原味）
+//   ② 没配搜索词 / 搜不到 → 直接 GET /card/v1/<id>，把详情拼成 v3 搜索的形状
+//      （2026-11-13 18:20 新增。价格字段同源同池，10-11 实测 1020 张
+//        get_lowest_sell_price ≡ transaction_sell_price、offer_price 也是一致，可以放心混用）
+function pinFromDetail(j) {
+  const offer = num(j.get_collection_lowest_sell_offer_price);
+  const cnt = num(j.get_collection_count);
+  return {
+    id: j.id,
+    name: j.name || '',
+    name_en: j.name_en || '',
+    image: j.image || '',
+    group_name: (j.group && j.group.name) || '',
+    member_name: (j.member && j.member.name) || '',
+    kind_name: (j.kind && j.kind.name) || '',
+    wish_count: 0,                       // 详情不给收藏数，排序会排在最后，无副作用
+    transaction_sell_price: j.get_lowest_sell_price,   // ≡ 搜索的 transaction_sell_price（匹配价）
+    offer_price: j.get_collection_lowest_sell_offer_price, // ≡ 搜索的 offer_price（速切价）
+    // v3 的 is_stocked 语义是「速切有货」：速切有报价 或 速切库存 > 0
+    is_stocked: offer > 0 || cnt > 0,
+  };
+}
+
 async function fetchPinned(list) {
   if (!PINS.length) return [];
   const have = new Set(list.map(r => String(r.id)));
@@ -791,8 +827,15 @@ async function fetchPinned(list) {
     if (c) {
       out.push(c);
       console.log(`  固定卡 ${pin.id} 已用「${pin.q}」搜到`);
+      continue;
+    }
+    // ② 兜底：按 id 直取详情
+    const j = await getJson(`/card/v1/${pin.id}`);
+    if (j && j.id) {
+      out.push(pinFromDetail(j));
+      console.log(`  固定卡 ${pin.id} 已按 id 直取详情：${j.name_en || j.name || ''}（${(j.member && j.member.name_en) || '?'}）`);
     } else {
-      console.log(`  ⚠️ 固定卡 ${pin.id} 拉取失败（没配搜索词或搜不到），本轮先跳过`);
+      console.log(`  ⚠️ 固定卡 ${pin.id} 拉取失败（搜索没配词/搜不到，详情也没拿到），本轮先跳过`);
     }
   }
   return out;
