@@ -363,7 +363,7 @@ jobs:
           # ① 直连：h2 多路复用，搜索页并发 >8 会被站方限速（返回 404 空体）
           # ② 中转：批量 20 路 × 2 批在飞 = 等效上游 40 并发，搜索用 16
           # ③ 订阅：node h2 + 自建 CONNECT 隧道（不能用 curl，它的指纹会被站方丢回旧后端），
-          #    站方没有 /__batch，所以禁批量；h2 单连接复用，搜索并发 8、明细 12
+          #    站方没有 /__batch，所以禁批量；h2 单连接复用，搜索并发 4、明细 6（2026-11-13 降速防特征）
           case "$GATE_MODE" in
             worker)
               export POCA_HOST=poca-proxy.1140382718.workers.dev
@@ -387,7 +387,11 @@ jobs:
               done
               export POCA_PROXY="$GATE_PROXY"
               export POCA_BATCH=0        # 站方没有 /__batch，走代理必须关批量
-              export POCA_CONC=8
+              # 2026-11-13 10:47 用户要求降并发：原来搜索 8 + 明细 12，一轮 1037 请求 45 秒跑完
+              #   ≈ 23 req/s，是全链路里最像爬虫的特征。降到 搜索 4 + 明细 6 ≈ 11 req/s，
+              #   一轮 80~90 秒；对「10 分钟一轮」毫无影响，但对她机场流量、站方风控都温和得多。
+              export POCA_CONC=4
+              export POCA_CONC_DET=6
               echo "订阅出口就绪：$POCA_PROXY"
               ;;
             *)
