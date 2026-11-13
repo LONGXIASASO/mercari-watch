@@ -50,6 +50,11 @@ on:
         required: false
         default: ''
         type: string
+      runner:
+        description: '⚠️ 一般留空。默认 windows-latest（2026-11-13 15:20 起，Linux 的 curl 被站方判 404）。填 ubuntu-latest 仅用于紧急回退'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: poca-watch
@@ -60,8 +65,21 @@ permissions:
 
 jobs:
   watch:
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # ⚠️⚠️ 2026-11-13 15:20 起换成 windows-latest（原 ubuntu-latest）。
+    #    原因：站方 13:10 起按**客户端 TLS 指纹**分流，同一个韩国节点（64.176.234.49）实测：
+    #      Windows Schannel curl → 200 · Git Bash 的 libcurl → 200
+    #      node 内置 http2       → 404/39 NOT_FOUND
+    #      Ubuntu 的 OpenSSL curl → 404/39（#2626 客户端矩阵实测）
+    #    ⇒ 传输层必须用 curl，且 Actions 侧必须多一层 `POCA_HTTP=curl`。
+    #    ⇒ Windows runner 上 Git Bash 的 curl（/ucrt64/bin/curl）实测 200，已够用。
+    #    保留 runner 输入只是为了紧急回退，正常轮次留空即可。
+    runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
+    timeout-minutes: 20
+    # Windows runner 默认 shell 是 pwsh，下面全是 bash 脚本，所以统一指定。
+    # （bash 由 Git for Windows 提供，与 _probe_win.sh 验证过的同一个）
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: 拉取脚本
         uses: actions/checkout@v4
@@ -212,14 +230,30 @@ jobs:
       #    2026-11-13 实测，Actions 的 Ubuntu curl 经韩国节点出去仍是 404/39（TLS/HTTP2 指纹被判），
       #    而同一个节点、同一个 IP，用 node+h2 出去就是 200。探测客户端必须和抓取客户端一致，
       #    否则会误判「这条出口不通」，把好好的通道白白跳过。
-      - name: 通路预检（① 直连 → ② 中转 → ③ 订阅兜底）
+      - name: 通路预检 + 抓取（① 直连 → ② 中转 → ③ 订阅兜底）
         id: gate
         env:
           POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
           FORCE: ${{ github.event.inputs.force_mode }}
+          POCA_Q: 장하오
         run: |
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
-          probe() { node poca/poca.js --probe > /tmp/probe.out 2>&1; }
+          # ── 平台适配（2026-11-13 15:20 换 windows-latest）──
+          # xray 可执行文件在 Windows 上带 .exe；关进程不能用 pkill（Git Bash 里没有）。
+          if [ "${RUNNER_OS:-Linux}" = "Windows" ]; then XRAY=/tmp/xray/xray.exe; else XRAY=/tmp/xray/xray; fi
+          XRAY_PID=""
+          xray_stop() {
+            if [ -n "$XRAY_PID" ]; then kill "$XRAY_PID" 2>/dev/null || true; XRAY_PID=""; fi
+            if [ "${RUNNER_OS:-Linux}" = "Windows" ]; then
+              taskkill //F //IM xray.exe >/dev/null 2>&1 || true
+            else
+              pkill -f '/tmp/xray/xray' >/dev/null 2>&1 || true
+            fi
+          }
+          # ⚠️ 探测一律带 POCA_HTTP=curl。2026-11-13 15:05 实测（#2626 客户端矩阵 + Windows runner 复验）：
+          #    同一个韩国出口，curl 200 / node 内置 h2 404，站方按客户端 TLS 指纹分流。
+          #    探测客户端必须与抓取客户端一致，否则会把好通道误判成「不通」。
+          probe() { POCA_HTTP=curl node poca/poca.js --probe > /tmp/probe.out 2>&1; }
           lastline() { tail -1 /tmp/probe.out | sed 's/^ *//'; }
 
           # ───────── ① 机房直连 ─────────
@@ -289,41 +323,49 @@ jobs:
               REASON="NO_SUB"; DETAIL="$DETAIL ｜ 未配置 POCA_SUB_URL，跳过订阅兜底"
             else
               echo "③ 订阅兜底：准备 Xray"
-                if [ ! -x /tmp/xray/xray ]; then
-                  curl -sSL -m 180 -o /tmp/xray.zip \
-                    'https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip'
-                  mkdir -p /tmp/xray && unzip -oq /tmp/xray.zip -d /tmp/xray
-                fi
-                node poca/_sub2xray.js --out /tmp/xray.json || true
-                if [ -s /tmp/xray.json ]; then
-                  nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
-                  sleep 3
-                  for P in 7891 7892 7893 7894; do
-                    if POCA_PROXY="http://127.0.0.1:$P" probe; then
-                      PROXYURL="http://127.0.0.1:$P"; MODE="sub"; DETAIL="订阅 :$P $(lastline)"
-                      echo "③ 订阅 :$P：$(lastline)"
-                      break
-                    fi
+              if [ ! -f "$XRAY" ]; then
+                case "${RUNNER_OS:-Linux}" in
+                  Windows) XZ=Xray-windows-64.zip ;;
+                  *)       XZ=Xray-linux-64.zip ;;
+                esac
+                echo "  下载 $XZ"
+                curl -sSL -m 180 -o /tmp/xray.zip \
+                  "https://github.com/XTLS/Xray-core/releases/latest/download/$XZ"
+                mkdir -p /tmp/xray && unzip -oq /tmp/xray.zip -d /tmp/xray
+              fi
+              node poca/_sub2xray.js --out /tmp/xray.json || true
+              if [ -s /tmp/xray.json ]; then
+                "$XRAY" -c /tmp/xray.json > /tmp/xray.log 2>&1 &
+                XRAY_PID=$!
+                sleep 4
+                for P in 7891 7892 7893 7894; do
+                  if POCA_PROXY="http://127.0.0.1:$P" probe; then
+                    PROXYURL="http://127.0.0.1:$P"; MODE="sub"; DETAIL="订阅 :$P $(lastline)"
                     echo "③ 订阅 :$P：$(lastline)"
-                  done
-                  # ── 客户端矩阵诊断（2026-11-13 15:05）──
-                  # 站方 13:10 起开始按客户端 TLS 指纹分流：本机 curl 200、node+h2 404。
-                  # 这里对同一个节点把三种客户端各探一次，一轮看清 Actions 的 Ubuntu 环境认哪一个。
-                  if [ -z "$MODE" ]; then
-                    echo "🔬 客户端矩阵诊断（同一节点 :7891）"
-                    for T in curl h2 http1; do
-                      POCA_HTTP=$T POCA_PROXY=http://127.0.0.1:7891 node poca/poca.js --probe > /tmp/pm_$T.out 2>&1 || true
-                      echo "   [$T] $(tail -1 /tmp/pm_$T.out | sed 's/^ *//')"
-                    done
-                    if grep -qhE '探测通过' /tmp/pm_*.out 2>/dev/null; then
-                      echo "   ⚠️ 矩阵里有能过的客户端 → 抓取步骤应固定用它"
-                    else
-                      echo "   ⚠️ 三种客户端全 404 → Actions 这个出口环境已整体不可用"
-                    fi
+                    break
                   fi
-                  # 探测完就关：抓取步骤会按同一份配置重新拉起，不依赖跨 step 的常驻进程
-                  pkill -f '/tmp/xray/xray' 2>/dev/null || true
+                  echo "③ 订阅 :$P：$(lastline)"
+                done
+                # ── 客户端矩阵诊断（2026-11-13 15:05 加）──
+                # 站方按客户端 TLS 指纹分流：curl 200、node+h2 404。
+                # 全不通时把三种客户端各探一次，一轮就能分清「客户端选错」还是「出口废了」。
+                if [ -z "$MODE" ]; then
+                  echo "🔬 客户端矩阵诊断（同一节点 :7891）"
+                  for T in curl h2 http1; do
+                    POCA_HTTP=$T POCA_PROXY=http://127.0.0.1:7891 node poca/poca.js --probe > /tmp/pm_$T.out 2>&1 || true
+                    echo "   [$T] $(tail -1 /tmp/pm_$T.out | sed 's/^ *//')"
+                  done
+                  if grep -qhE '探测通过' /tmp/pm_*.out 2>/dev/null; then
+                    echo "   ⚠️ 矩阵里有能过的客户端 → 抓取应固定用它（POCA_HTTP）"
+                  else
+                    echo "   ⚠️ 三种客户端全 404 → 这个出口环境已整体不可用"
+                  fi
+                  echo "   xray 日志末尾："
+                  tail -5 /tmp/xray.log 2>/dev/null | sed 's/^/     /' || true
                 fi
+                # 探测完就关，抓取段会按同一份配置重新拉起（不赌后台进程跨段存活）
+                xray_stop
+              fi
                 if [ -z "$MODE" ]; then
                   REASON="SUB_FAIL"; DETAIL="$DETAIL ｜ 订阅节点全不通"
                 fi
@@ -351,41 +393,42 @@ jobs:
             echo "GATE_DETAIL=$DETAIL" >> "$GITHUB_ENV"
           fi
 
-      - name: 抓取 Poca（按预检结果选出口）
-        if: steps.gate.outputs.ok == '1'
-        env:
-          POCA_Q: 장하오
-          # 出口不在这里写死：① 直连 / ② 中转 / ③ 订阅，由预检步骤决定后传进来
-          GATE_MODE: ${{ steps.gate.outputs.mode }}
-          GATE_PROXY: ${{ steps.gate.outputs.proxy }}
-        run: |
+          # ══════════ 抓取（原独立 step，2026-11-13 15:20 合并进来）══════════
+          # 合并原因：Windows runner 上跨 step 的后台进程不可靠（xray、pkill 都依赖它），
+          # 放进同一个 shell 里，进程生命周期自己管，抓完立刻关。
+          if [ "$MODE" = "none" ]; then echo "⏭ 三级出口全不通，跳过抓取"; exit 0; fi
+          # ⚠️⚠️ 传输层固定 curl（2026-11-13 15:05 实测，不要改回 h2）：
+          #    同一个韩国出口 64.176.234.49，curl → 200 / node 内置 http2 → 404/39。
+          #    站方按客户端 TLS 指纹分流。node h2 从 13:10 起全线被判 NOT_FOUND。
+          export POCA_HTTP=curl
           # ── 并发按出口给，别再一刀切 ──
-          # ① 直连：h2 多路复用，搜索页并发 >8 会被站方限速（返回 404 空体）
+          # ① 直连：curl 每请求一个进程，并发 8
           # ② 中转：批量 20 路 × 2 批在飞 = 等效上游 40 并发，搜索用 16
-          # ③ 订阅：node h2 + 自建 CONNECT 隧道（不能用 curl，它的指纹会被站方丢回旧后端），
-          #    站方没有 /__batch，所以禁批量；h2 单连接复用，搜索并发 4、明细 6（2026-11-13 降速防特征）
-          case "$GATE_MODE" in
+          # ③ 订阅：curl 经本地 Xray 的 CONNECT 隧道，站方没有 /__batch 所以禁批量；
+          #    搜索 4、明细 6（2026-11-13 降速防特征，约 11 req/s）
+          case "$MODE" in
             worker)
               export POCA_HOST=poca-proxy.1140382718.workers.dev
-              export POCA_KEY="$GATEKEY"
+              export POCA_KEY="$FOUND"
               export POCA_BATCH=20
               export POCA_BATCH_CONC=2
               export POCA_CONC=16
               ;;
             sub)
-              # ⚠️ 预检那次起的 xray 已经 kill 掉了（不赌「后台进程能跨 step 存活」），这里按同一份
+              # ⚠️ 预检那次起的 xray 已经关了（不赌后台进程能跨段存活），这里按同一份
               #    /tmp/xray.json 重新拉起；起好再抓，抓完立刻关，绝不留后台连接占她的设备位。
               if [ ! -s /tmp/xray.json ]; then
                 echo "::error::/tmp/xray.json 没了，订阅出口起不来"
                 exit 1
               fi
-              nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
-              PORT="${GATE_PROXY##*:}"
+              "$XRAY" -c /tmp/xray.json > /tmp/xray.log 2>&1 &
+              XRAY_PID=$!
+              PORT="${PROXYURL##*:}"
               for i in $(seq 1 30); do
                 (echo > /dev/tcp/127.0.0.1/"$PORT") >/dev/null 2>&1 && break
                 sleep 0.5
               done
-              export POCA_PROXY="$GATE_PROXY"
+              export POCA_PROXY="$PROXYURL"
               export POCA_BATCH=0        # 站方没有 /__batch，走代理必须关批量
               # 2026-11-13 10:47 用户要求降并发：原来搜索 8 + 明细 12，一轮 1037 请求 45 秒跑完
               #   ≈ 23 req/s，是全链路里最像爬虫的特征。降到 搜索 4 + 明细 6 ≈ 11 req/s，
@@ -398,7 +441,7 @@ jobs:
               export POCA_CONC=8
               ;;
           esac
-          echo "出口模式=$GATE_MODE · POCA_HOST=${POCA_HOST:-phocamarket.com} · POCA_PROXY=${POCA_PROXY:-无}"
+          echo "出口模式=$MODE · 传输=curl · POCA_HOST=${POCA_HOST:-phocamarket.com} · POCA_PROXY=${POCA_PROXY:-无}"
 
           # ⚠️ --min-gap = 2（2026-11-12 18:45 用户指定，原为 5；历史上绝不能回到 8）：
           #    计时起点是**上一轮抓取写完盘的时刻**（state.json 的 at，不是开始时间）。
@@ -446,7 +489,7 @@ jobs:
           RC=$?
           set -e
           # 订阅模式无论成败都立刻关代理
-          if [ "$GATE_MODE" = "sub" ]; then pkill -f '/tmp/xray/xray' 2>/dev/null || true; fi
+          if [ "$MODE" = "sub" ]; then xray_stop; fi
           exit $RC
 
       - name: 确认产物
