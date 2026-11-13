@@ -321,7 +321,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 //    ⇒ 现在常规轮只抓 65 页搜索，curl 每请求 spawn 一个进程完全扛得住（并发 8 约 10 秒）。
 let TRANSPORT = ['h2', 'http1', 'curl'].includes(process.env.POCA_HTTP)
   ? process.env.POCA_HTTP
-  : (PROXY ? 'curl' : 'h2');
+  : 'curl';   // 2026-11-13 15:20：实测 curl 200 / node h2 404，默认固定 curl，别再回退 h2
 let H2_RECONNECT = 0;
 let RATE_BACKOFF = 0;   // 疑似「被限速」的退避次数，成功一次就清零
 
