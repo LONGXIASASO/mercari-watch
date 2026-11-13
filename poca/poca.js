@@ -1049,8 +1049,10 @@ const KIND_KR2EN = {
     const t = liveT || (pv ? num(pv.t) : 0) || (hold ? num(hold[2]) : 0);    // 速切最近成交
     const fromCarry = (b > 0 && !liveB) || (mp > 0 && !liveMp) || (t > 0 && !liveT);
     // 库存：本轮实测件数 → 上一轮件数 → v3 的布尔（快跑轮别退化成「库 1」）
+    // ⚠️ 2026-11-13 12:00 --skip-detail 轮没有 dv.st，必须先用搜索的 is_stocked 判「是否卖光」：
+    //    卖光 → 0（搜索给得准）；还挂着 → 沿用上轮件数。反过来的话卡卖光了还会一直显示旧件数。
     const stock = (dv.st === undefined)
-      ? (pv && typeof pv.stock === 'number' ? pv.stock : (r.is_stocked ? 1 : 0))
+      ? (!r.is_stocked ? 0 : (pv && typeof pv.stock === 'number' ? pv.stock : 1))
       : dv.st;
 
     // 存档：本轮拿到的（实时或沿用）值留作下一轮的保底
