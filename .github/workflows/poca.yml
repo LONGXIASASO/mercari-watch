@@ -395,14 +395,29 @@ jobs:
           #                          → 匹配价 / 速切价 / 最高求购 / 库存件数 照常更新，请求量 2422 → 1102（-54%）
           #   每日 0 点轮 = 全量：把挂单明细、成交明细补一次（这两块每天更新一次够用）
           # ⚠️ 触发时刻是每小时 :09 :19 … ，所以「0 点轮」= 00:09 那一轮（HOUR=00 且 MIN<20）。
-          HOUR=$(TZ=Asia/Shanghai date +%H)
-          MIN=$(TZ=Asia/Shanghai date +%M)
-          if [ "$HOUR" = "00" ] && [ "$MIN" -lt 20 ]; then
+          # ⚠️ 不用 `TZ=Asia/Shanghai date`：部分环境没有 tzdata，会静默返回 UTC（本机实测踩过）。
+          #    直接用 UTC + 8 手算，跨平台一定对。10# 前缀是为了让 08 / 09 按十进制解析。
+          HOUR=$(printf '%02d' $(( (10#$(date -u +%H) + 8) % 24 )))
+          MIN=$(date -u +%M)
+          if [ "$HOUR" = "00" ] && [ "$((10#$MIN))" -lt 20 ]; then
             LITE_ARGS=""
             echo "📅 0 点轮：抓全量（含挂单/成交明细）"
           else
-            LITE_ARGS="--lite"
-            echo "⚡ 常规轮：--lite（只搜索 + 单卡详情，明细留到 0 点）"
+            # 兜底：距上次「真正抓到明细」超过 25 小时就补一次全量，
+            # 防止 0 点那一轮恰好被 --min-gap 挡掉、或出口全挂跳过，导致整天没明细。
+            LASTDEEP=$(node -e "try{const s=JSON.parse(require('fs').readFileSync('poca/state.json','utf8'));process.stdout.write(s.deepAt||'')}catch(e){}" 2>/dev/null || true)
+            GAPD=999999
+            if [ -n "$LASTDEEP" ]; then
+              LASTSEC=$(date -d "$LASTDEEP" +%s 2>/dev/null || echo 0)
+              if [ "$LASTSEC" -gt 0 ]; then GAPD=$(( $(date +%s) - LASTSEC )); fi
+            fi
+            if [ "$GAPD" -gt 90000 ]; then
+              LITE_ARGS=""
+              echo "📅 距上次抓明细 $((GAPD / 3600)) 小时（>25），本轮补一次全量"
+            else
+              LITE_ARGS="--lite"
+              echo "⚡ 常规轮：--lite（只搜索 + 单卡详情，明细留到 0 点；距上次明细 $((GAPD / 3600)) 小时）"
+            fi
           fi
           set +e
           if [ "${{ steps.wish.outputs.skip }}" = "1" ]; then
