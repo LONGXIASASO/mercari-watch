@@ -53,7 +53,7 @@ on:
         default: ''
         type: string
       runner:
-        description: '⚠️ 一般留空。默认 ubuntu-latest（2026-11-13 15:55 切回）。填 windows-latest 用于 Ubuntu 的 curl 又被判 404 时紧急回退'
+        description: '⚠️ 一般留空，**必须是 windows-latest**（Ubuntu 的 OpenSSL curl 会被判 404/39，#2638 实测）。填 ubuntu-latest 只会让本轮失败'
         required: false
         default: ''
         type: string
@@ -72,23 +72,25 @@ permissions:
 
 jobs:
   watch:
-    # ⚠️⚠️ 2026-11-13 15:55 切回 ubuntu-latest（当天 15:20 曾换成 windows-latest，现在撤回）。
-    #    撤回理由 —— 那 35 分钟的「换 OS 就好了」是误读，变量一直是**客户端**不是操作系统：
-    #      13:10 事故时 Ubuntu runner 上用 node 内置 http2 探测 → 404/39
-    #      15:20 换到 Windows 后顺手把传输层改成 curl → 200
-    #    两个变量同时变了，我错把「客户端不同」当成「OS 不同」。事后六组合矩阵单独验过：
-    #      同一韩国节点 64.176.234.49，Windows Schannel curl → 200、Git Bash libcurl → 200、
-    #      node 内置 http2 → 404/39。**没有任何一组能证明操作系统是变量。**
-    #    ⇒ 真正要守住的只有一条：全链路 `POCA_HTTP=curl`（见下面抓取段）。
-    #    ⇒ 换回 Ubuntu 的收益：单轮 170s → 80~90s（Windows 每次要多装一遍 sharp、启动也慢），
-    #      且 Windows 计费两倍（仓库公开不限量，这条只是不浪费）。
-    #    ⚠️ 下面的平台适配代码（xray.exe / taskkill / RUNNER_OS 判断）**故意保留**：
-    #      Linux 上走 Linux 分支，无副作用；真遇到 Ubuntu 的 curl 又被判 404 时，
-    #      runner 输入填 windows-latest 就能一键回退，不用再改代码。
-    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    # 🚨🚨 必须 windows-latest。2026-11-13 15:56 用 #2638 做了一次干净的对照实验，
+    #    把「OS 是不是变量」这件事彻底钉死（别再改回 ubuntu，别再怀疑这条）：
+    #      同一份订阅 → 同一份 /tmp/xray.json → 同一个韩国节点 :7891，只换 runner 操作系统：
+    #        windows-latest + curl（Schannel）         → ✅ 200，16 条结果
+    #        ubuntu-latest  + curl（OpenSSL）          → ❌ 404/39 NOT_FOUND，四个端口全灭
+    #        ubuntu-latest  + node 内置 h2（OpenSSL）  → ❌ 404/39
+    #        ubuntu-latest  + node http1（OpenSSL）    → ❌ 404/39
+    #      xray 日志显示 connection accepted（隧道是通的，不是代理没起来）。
+    #    ⇒ 判据是 **TLS 栈指纹**：Windows Schannel 放行，OpenSSL 系（Ubuntu 的 curl、node 的 h2/http1）
+    #      一律被判 NOT_FOUND。跟出口 IP、AS 段、地区无关（同一节点同一个 IP）。
+    #    ⇒ 所以「换 OS 没用、只有客户端 curl 有用」这句话是**错的**，别据此再切回 Linux。
+    #      curl 换成 Windows 的只是必要条件的一半：curl + Schannel 缺一不可。
+    #    ⇒ 代价接受：Windows 计费两倍（仓库公开不限量）、每轮多装一遍 sharp、总耗时约 170s。
+    #    ⚠️ 下面的平台适配代码（xray.exe / taskkill / RUNNER_OS 判断）不是「兼容保留」，
+    #      而是**当前实际执行路径**，删不得。
+    runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
     timeout-minutes: 20
-    # 统一 bash：Windows runner 默认是 pwsh，而下面全是 bash 脚本。
-    # Linux runner 本来就是 bash，这行等于没写，留着是为了回退时不漏。
+    # Windows runner 默认 shell 是 pwsh，下面全是 bash 脚本，所以统一指定。
+    # （bash 由 Git for Windows 提供，与 _probe_win.sh 验证过的同一个；它的 curl 也是 Schannel）
     defaults:
       run:
         shell: bash
@@ -253,10 +255,10 @@ jobs:
           POCA_Q: 장하오
         run: |
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
-          # ── 平台适配（2026-11-13 15:20 为 windows-latest 写的，15:55 切回 ubuntu 后**故意保留**）──
+          # ── 平台适配（windows-latest 是当前实际执行路径，#2638 之后不要再删）──
           # xray 可执行文件在 Windows 上带 .exe；关进程不能用 pkill（Git Bash 里没有）。
-          # Linux 上 RUNNER_OS=Linux，所有判断都走 else 分支，与切回前完全一致，无副作用。
-          # 留着是为了「runner 填 windows-latest 一键回退」时不用再改代码。
+          # ⚠️ 这不只是「为 Windows 写的兼容分支」：整个 job 就只在 windows-latest 上跑，
+          #    Ubuntu 的 OpenSSL curl 经同一隧道一律 404/39（#2638 对照实验）。
           if [ "${RUNNER_OS:-Linux}" = "Windows" ]; then XRAY=/tmp/xray/xray.exe; else XRAY=/tmp/xray/xray; fi
           XRAY_PID=""
           xray_stop() {
