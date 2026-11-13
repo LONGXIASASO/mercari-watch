@@ -290,7 +290,11 @@ jobs:
             else
               # ⚠️ 别用 `tr -dc 0-9` 提取：文件不存在时 raw 返回的 404 页面里也有数字，
               #    会把 LAST 读成 "404"（2026-11-13 实测踩过）。只认「整行 10 位 epoch 秒」。
-              LAST=$(curl -sSL -m 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt" 2>/dev/null | tr -d ' \r\n' | grep -oE '^[0-9]{10}$' || true)
+              # ⚠️ CDN 缓存坑（2026-11-13 实测）：raw.githubusercontent 有最长约 5 分钟的边缘缓存，
+              #    读到旧值会让「距上次订阅抓取」算大，导致订阅被提前放行、烧流量。加 cache-buster 绕过。
+              LAST=$(curl -sSL -m 20 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+                "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-data/subat.txt?_cb=$(date +%s%N)" \
+                2>/dev/null | tr -d ' \r\n' | grep -oE '^[0-9]{10}$' || true)
               NOW=$(date +%s)
               GAP=$(( NOW - ${LAST:-0} ))
               # force_mode=sub 时跳过节流（排障/验证用，正常轮次绝不会设它）
