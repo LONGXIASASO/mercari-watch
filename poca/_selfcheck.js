@@ -28,7 +28,8 @@ function viaCurl(ua) {
     execFile('curl', args, { maxBuffer: 24 * 1024 * 1024, timeout: 30000 }, (err, stdout) => {
       const out = String(stdout || '');
       const m = /__CODE__(\d+)\s*$/.exec(out);
-      const body = out.replace(/__CODE__\d+\s*$/, '');
+      // ⚠️ 必须 trim：-w 前缀有 \n，不 trim 会比实际多 1 字节（404/39 会显示成 40）
+      const body = out.replace(/__CODE__\d+\s*$/, '').trim();
       res({ s: m ? Number(m[1]) : 0, len: Buffer.byteLength(body, 'utf8'), err: err ? (err.code || 'ERR') : '' });
     });
   });
@@ -78,11 +79,11 @@ function egressIp() {
   console.log('===== 判读 =====');
   if (cApp.s === 200) {
     console.log('✅ 通路正常：curl 能拿到数据，与抓取用的客户端一致');
-  } else if (cApp.s === 404 && cApp.len === 39) {
-    console.log('❌ curl 也 404/39 = 这个出口整体被判（地区分流 / 指纹白名单又变），不是客户端选错。');
-    console.log('   下一步看预检日志里三级出口哪一级通。');
-  } else if (cApp.s === 404 && cApp.len <= 2) {
-    console.log('⚠️ 404 空体 = 大概率按速率限速，等几分钟再试');
+  } else if (cApp.s === 404 && cApp.len <= 60) {
+    console.log('ℹ️ 直连 404/39 NOT_FOUND：本轮走的是 runner 的 Azure 出口，被站方地区分流（预期）。');
+    console.log('   真正的通路看预检的三级探测结果，不要只看这一段。');
+  } else if (cApp.s === 404) {
+    console.log(`⚠️ 404 但响应 ${cApp.len} 字节，形态不像 NOT_FOUND，可能是限速/网关错误（等几分钟再看）`);
   } else if (cApp.s === 0) {
     console.log('❌ curl 连不上（DNS/TLS/超时），查出口网络；err=' + (cApp.err || '-'));
   } else {
