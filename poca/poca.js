@@ -284,6 +284,12 @@ const SKIP_WISH = process.argv.includes('--skip-wish'); // 收藏排名变化慢
 //   明细占总请求量 55%，而且限速失败全部集中在它身上。跳过明细能把单轮请求量砍掉一半以上，
 //   页面受影响的两个区块会沿用 darc.json 里的历史记录（标记为往轮），历史一条不丢。
 const SKIP_DETAIL = process.argv.includes('--skip-detail');
+// --lite（2026-11-13 11:15 用户定的新节奏）：只抓「搜索 + 单卡详情」，跳过 /sell、/matching 明细。
+//   匹配价 mp / 速切价 t / 最高求购 b / 库存件数 st **全部来自单卡详情**（搜索里没有），所以 --lite 下
+//   这几个标量照常实时更新；只有「挂单明细行 ds」「成交明细行 dm」会空着，由 darc.json 里攒下的
+//   历史记录兜底显示，每天 0 点那一轮再补新行。请求量：2422 → 1102（-54%）。
+//   ⚠️ 别和 --skip-detail 混：那个连详情都不抓，mp/t 只能沿用上一轮，是排障用的。
+const LITE = process.argv.includes('--lite');
 // --fast：已废弃（2026-11-12 17:00）。批量取把配额降了 13 倍后，快跑轮/完整轮的分工没有存在意义，
 //   每轮都全量。参数仍被接受但不再产生任何效果，避免旧 workflow 缓存里带着它时行为不可预期。
 const FAST = process.argv.includes('--fast');   // 仅为兼容保留，见上面注释
@@ -658,7 +664,7 @@ const rowsOf = (o, max) => (o && Array.isArray(o.results))
 //   p=0 但仍有成交的 46%                        ⇒ 成交明细不能用 p 判
 //   stock=0 且 p=0 且 b=0（最冷）→ 挂单/成交/求购 全 0
 // 所以分两阶段：先拿详情（p/st/b 都在这），再按需发明细请求，省掉约 19% 的请求。
-async function fetchDetails(ids) {
+async function fetchDetails(ids, withRows = true) {
   const out = {};
   const pOf = {};                     // id → 匹配最低卖价，仅用于决定抓不抓明细，不落盘
   let fails = 0;
@@ -683,6 +689,12 @@ async function fetchDetails(ids) {
     pOf[id] = num(j.get_lowest_sell_price);
   }
   if (fails > ids.length * 0.3) throw new Error(`单卡详情失败 ${fails}/${ids.length}，放弃本次`);
+
+  // --lite：明细（挂单/成交明细行）不抓，标量值已经全部到手，直接返回
+  if (!withRows) {
+    console.log(`  --lite：跳过挂单/成交明细；${Object.keys(out).length} 张卡的匹配价/速切价/求购/库存已更新（明细行沿用档案）`);
+    return out;
+  }
 
   // 阶段 2：按需抓明细
   //   挂单 sell   → 只在 p>0 时抓（没人挂单时必定空，实测 0% 命中）
@@ -902,15 +914,18 @@ const KIND_KR2EN = {
   const ids = main.list.map(r => r.id);
   const useDetail = !SKIP_DETAIL;
 
-  // --skip-detail 仍保留（临时排障用）；触发时沿用上一轮 data.json 的记录，标记不变
-  if (!useDetail) {
+  // 上一轮 data.json 的读取条件：
+  //   --skip-detail：整块沿用（详情/明细都不抓）
+  //   --lite       ：只为继承明细行和「仍在挂」标记 —— 本轮不抓 /sell，第三位标记必须从上一轮带过来，
+  //                  否则页面上所有挂单都会从「仍在挂」掉成「往轮记录」（可见的退化）
+  if (!useDetail || LITE) {
     try {
       const p = path.join(HERE, 'data.prev.json');
       if (fs.existsSync(p)) {
         const pj = JSON.parse(fs.readFileSync(p, 'utf8'));
         PREV_DET = pj.det || {};
         for (const it of (pj.items || [])) if (it && it.id) PREV_ITEMS[it.id] = it;
-        console.log(`沿用上一轮 data.json：${Object.keys(PREV_ITEMS).length} 张卡`);
+        console.log(`沿用上一轮 data.json：${Object.keys(PREV_ITEMS).length} 张卡${LITE && useDetail ? '（--lite：仅继承明细行与「仍在挂」标记）' : ''}`);
       } else {
         console.log('⚠️ 没有 data.prev.json，本轮详情/明细只能走档案兜底');
       }
@@ -919,11 +934,12 @@ const KIND_KR2EN = {
     }
   }
 
-  const detail = useDetail ? await fetchDetails(ids) : {};
+  const detail = useDetail ? await fetchDetails(ids, !LITE) : {};
   if (!useDetail) {
     console.log(`详情+明细跳过（--skip-detail）；沿用上一轮 ${Object.keys(PREV_ITEMS).length} 张卡的求购/成交/库存/挂单记录`);
   } else {
-    console.log(`详情+明细完成 ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
+    const what = LITE ? '单卡详情完成（明细行已跳过）' : '详情+明细完成';
+    console.log(`${what} ${Object.keys(detail).length}/${ids.length} 张，累计 ${Math.round((Date.now() - t0) / 1000)}s`);
   }
 
   // 明细永久档案 darc.json：站方每轮只给最新 5 条，这里把历轮拿到的挂单/成交行攒起来。
@@ -1224,7 +1240,8 @@ const KIND_KR2EN = {
   const nextState = {
     at: out.at,
     // 上一次真正跑详情+明细的时间；快跑轮靠它判断要不要升级成完整抓取（见 --fast 注释）
-    deepAt: useDetail ? out.at : (prevState.deepAt || ''),
+    // deepAt 只在「真的抓了挂单/成交明细」的轮次才推进，--lite 轮不碰它
+    deepAt: (useDetail && !LITE) ? out.at : (prevState.deepAt || ''),
     snap: Object.fromEntries(items.map(x => [x.id, [x.p, x.q, x.t]])),
     hist,
   };
