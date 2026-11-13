@@ -57,8 +57,13 @@ on:
         required: false
         default: ''
         type: string
+      pin_detail:
+        description: '✅ 常用：填 1 = 本轮只给「固定监控卡」（PINS 里那几张，目前 7 张）补一遍详情+挂单+成交明细，其它 1000 多张照旧只抓搜索。约 14 个额外请求，不触发风控'
+        required: false
+        default: ''
+        type: string
       deep:
-        description: '⚠️ 只在周末手动补明细时填 1：本轮抓「搜索 + 单卡详情 + 挂单/成交明细」全量。留空 = 只抓搜索（默认，自动轮次全是这个）'
+        description: '⚠️ 慎用：填 1 = 全站 1000+ 张卡都抓详情+明细（约 2500 请求，一次性调用）。平时补明细请用上面的 pin_detail'
         required: false
         default: ''
         type: string
@@ -242,17 +247,22 @@ jobs:
       #       现在和别的通道一样，靠外部 10 分钟定时器触发节奏（仍受 --min-gap 2 防重入保护）。
       #       subat.txt 只作「上次用订阅是什么时候」的记录，不再参与任何判断。
       #       用完立刻 kill，下一轮照样先探 ① ②，绝不让订阅长期顶班、也不多占她的设备位。
-      # ⚠️⚠️ 探测和抓取**必须用同一个客户端 curl**（2026-11-13 15:05 实测定论，这句推翻旧注释）：
-      #    同一个韩国节点 64.176.234.49 —— curl 出去 200 / 7768 字节；node 内置 http2 出去 404/39。
-      #    站方按客户端 TLS 指纹分流，跟出口 IP、AS 段、操作系统全都无关。
+      # ⚠️⚠️ 探测和抓取**必须用同一个客户端 curl**（2026-11-13 15:05 实测）：
+      #    同一个韩国节点 —— curl 出去 200 / 7768 字节；node 内置 http2 出去 404/39。
       #    所以 `--probe` 也走 curl（poca.js 里 TRANSPORT 默认就是 curl，不再回退 h2）。
-      #    历史上「探测用 node+h2 通过、抓取用 curl」的记录是当时隧道没真正走成的误判，别再信。
+      # ⚠️⚠️ 但「跟操作系统无关」这句是错的，#2638（15:56）已当场推翻：
+      #    同一份订阅、同一节点，Ubuntu 的 curl（OpenSSL）四种客户端全 404/39，
+      #    Windows 的 curl（Schannel）200。⇒ curl + Schannel 两个条件缺一不可，
+      #    详见上面 runs-on 那段注释，别再据此切回 ubuntu。
       - name: 通路预检 + 抓取（① 直连 → ② 中转 → ③ 订阅兜底）
         id: gate
         env:
           POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
           FORCE: ${{ github.event.inputs.force_mode }}
           POCA_Q: 장하오
+          # 固定监控卡单独补明细（2026-11-13 18:20）。留空=关。
+          # 只给 PINS 里那 7 张发明细请求（约 14 个），其它 1000 多张卡照旧只抓搜索。
+          POCA_PIN_DETAIL: ${{ github.event.inputs.pin_detail }}
         run: |
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
           # ── 平台适配（windows-latest 是当前实际执行路径，#2638 之后不要再删）──
