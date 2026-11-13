@@ -306,6 +306,21 @@ jobs:
                     fi
                     echo "③ 订阅 :$P：$(lastline)"
                   done
+                  # ── 客户端矩阵诊断（2026-11-13 15:05）──
+                  # 站方 13:10 起开始按客户端 TLS 指纹分流：本机 curl 200、node+h2 404。
+                  # 这里对同一个节点把三种客户端各探一次，一轮看清 Actions 的 Ubuntu 环境认哪一个。
+                  if [ -z "$MODE" ]; then
+                    echo "🔬 客户端矩阵诊断（同一节点 :7891）"
+                    for T in curl h2 http1; do
+                      POCA_HTTP=$T POCA_PROXY=http://127.0.0.1:7891 node poca/poca.js --probe > /tmp/pm_$T.out 2>&1 || true
+                      echo "   [$T] $(tail -1 /tmp/pm_$T.out | sed 's/^ *//')"
+                    done
+                    if grep -qhE '探测通过' /tmp/pm_*.out 2>/dev/null; then
+                      echo "   ⚠️ 矩阵里有能过的客户端 → 抓取步骤应固定用它"
+                    else
+                      echo "   ⚠️ 三种客户端全 404 → Actions 这个出口环境已整体不可用"
+                    fi
+                  fi
                   # 探测完就关：抓取步骤会按同一份配置重新拉起，不依赖跨 step 的常驻进程
                   pkill -f '/tmp/xray/xray' 2>/dev/null || true
                 fi
