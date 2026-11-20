@@ -1,0 +1,27 @@
+name: 字体探针（临时）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fonttest:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 列出 CJK 字体文件
+        shell: pwsh
+        run: |
+          Get-ChildItem C:\Windows\Fonts | Where-Object { $_.Name -match 'msyh|simsun|simhei|msgothic|malgun|batang|deng' } | Select-Object -ExpandProperty Name
+      - name: 装 sharp
+        run: npm install sharp --no-save --no-audit --no-fund
+      - name: 出图并上传
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node poca/_fonttest.js
