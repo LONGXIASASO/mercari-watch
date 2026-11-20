@@ -556,8 +556,10 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     const hourKey = new Date(t0 * 1000).toISOString().slice(0, 13); // UTC 小时桶
     const dg = snap.digest;
     if (dg.hour !== hourKey) {
-      const newList = items.filter(i => i.first_seen >= t0 - 3600 && (i.first_seen === i.last_seen || i.first_seen > (dg.flushed_at || 0)));
-      const dropList = dropped.filter(i => i.last_seen > (dg.flushed_at || 0));
+      // ⚠️ 必须排除已售：items 里含「本轮没再出现、按残留标成 sold」的旧条目，
+      //    播报时它们早就卖掉了，放进「上新/降价」只会误导（她 11-20 明确指出）
+      const newList = items.filter(i => !i.sold && i.first_seen >= t0 - 3600 && (i.first_seen === i.last_seen || i.first_seen > (dg.flushed_at || 0)));
+      const dropList = dropped.filter(i => !i.sold && i.last_seen > (dg.flushed_at || 0));
       // 无条件进汇总：美区这一小时没动静时日区可能上了新卡，由 pushDigest 自己判断有没有内容
       const sent = await pushDigest(snap, newList, dropList);
       if (sent) dg.flushed_at = t0;
@@ -591,12 +593,13 @@ function cardLines(it, idx) {
   ];
 }
 
-// 日区：价格就按页面一致的日元显示（页面本身不折人民币，别在播报里自造汇率）
+// 日区：日元原价 + 实时汇率折人民币（JP¥ 是日元、¥ 是人民币，别混）
 function jpCardLines(it, idx) {
   const name = mdName(it.name_cn || it.name).slice(0, 30) || '（无标题）';
   const jpy = Number(it.price_jpy) || 0;
+  const cny = JP_RATE > 0 ? ` ≈ ¥${(jpy * JP_RATE).toFixed(1)}` : '';
   return [
-    `**${idx}**　[${name}](https://jp.mercari.com/item/${it.id})　¥${jpy.toLocaleString('en-US')}`,
+    `**${idx}**　[${name}](https://jp.mercari.com/item/${it.id})　JP¥${jpy.toLocaleString('en-US')}${cny}`,
   ];
 }
 
@@ -615,8 +618,12 @@ async function fetchJpFresh(winSec) {
     try {
       const d = JSON.parse(r.buf.toString('utf8'));
       const now = Math.floor(Date.now() / 1000);
+      // 日区判售要连续 45 分钟搜不到才打 sold 标记，所以这里再用「45 分钟内还见过」兜一道：
+      // 上架后没几个小时就消失的，多半在播报前已经卖了，不该算进上新。
       const list = (d.items || [])
-        .filter(it => it && !it.sold && (Number(it.created_ts) || 0) >= now - winSec)
+        .filter(it => it && !it.sold
+          && (Number(it.created_ts) || 0) >= now - winSec
+          && (!it.last_seen || Date.parse(it.last_seen) / 1000 >= now - 45 * 60))
         .sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
       log(`日区快照 ${(d.items || []).length} 张，近 ${Math.round(winSec / 60)} 分钟上新 ${list.length} 张`);
       return list;
@@ -624,6 +631,28 @@ async function fetchJpFresh(winSec) {
   }
   log('⚠️ 拉不到日区快照，本次汇总只播美区');
   return [];
+}
+
+// 日元 → 人民币实时汇率（1 JPY = ? CNY）。多个免费源依次试，全挂了就不显示换算，绝不写死假汇率。
+let JP_RATE = 0;
+
+async function fetchJpyCny() {
+  const srcs = [
+    ['er-api', 'https://open.er-api.com/v6/latest/JPY', j => j && j.rates && j.rates.CNY],
+    ['jsdelivr', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/jpy.json', j => j && j.jpy && j.jpy.cny],
+    ['frankfurter', 'https://api.frankfurter.app/latest?from=JPY&to=CNY', j => j && j.rates && j.rates.CNY],
+  ];
+  for (const [tag, u, pick] of srcs) {
+    const r = await rawGet(u, 15000);
+    if (r.status !== 200) { log(`汇率源 ${tag} 不可用（${r.status}）`); continue; }
+    try {
+      const v = Number(pick(JSON.parse(r.buf.toString('utf8'))));
+      // 正常区间 0.01~0.3，超出多半是接口换了格式
+      if (v > 0.01 && v < 0.3) { log(`日元汇率 1 JPY = ${v} CNY（${tag}）`); return v; }
+    } catch (e) { log(`汇率源 ${tag} 解析失败`); }
+  }
+  log('⚠️ 汇率源全部取不到，日区只显示日元');
+  return 0;
 }
 
 // 按行数 + 字节双约束装箱，切成多条消息（序号跨段不重来，跟图上的红圈一致）
@@ -658,7 +687,10 @@ function buildMd(p, snap) {
     L.push(...p.lines(it, idx));
   });
   if (p.trunc > 0) L.push('', `> 另有 ${p.trunc} 条没列出，点上面看板看全部`);
-  L.push('', `> 美区代切价 =（卡价 + 运费）× 7.2 + 7；日区按日元原价`);
+  const tail = JP_RATE > 0
+    ? `> 美区代切 =（卡价 + 运费）× 7.2 + 7；日区按实时汇率 1 日元 ≈ ${JP_RATE.toFixed(4)} 元折算`
+    : `> 美区代切 =（卡价 + 运费）× 7.2 + 7；日区按日元原价`;
+  L.push('', tail);
   return L.join('\n');
 }
 
@@ -668,6 +700,7 @@ async function pushDigest(snap, newList, dropList) {
 
   // 日区：同一小时窗内的上新（日区快照没有历史价，判不了降价）
   const jpFresh = await fetchJpFresh(3600);
+  JP_RATE = jpFresh.length ? await fetchJpyCny() : 0;
 
   const nShow = newList.slice(0, SHEET_MAX);
   const dShow = dropList.slice(0, SHEET_MAX);
