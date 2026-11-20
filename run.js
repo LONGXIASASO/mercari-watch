@@ -378,16 +378,25 @@ function buildSnap(prev, fresh, liveIds, canSync, runRow) {
 
   // ② 本轮商品覆盖上去。已售商品不带 list_ts → 沿用旧的冻结值，
   //    这样它卖掉时位置不动（和云库 upsert「缺字段不改该列」同一个效果）
-  let soldNow = 0, backOn = 0;
+  let soldNow = 0, backOn = 0, priceChg = 0;
   for (const it of fresh) {
     const old = bag.get(String(it.id));
     if (old) {
       if (it.list_ts == null && old.list_ts != null) it.list_ts = old.list_ts;
       // 之前判过已售、这轮又在在售里抓到 → 恢复（卖家撤销售出/误判）
       if (old.sold && !it.sold) backOn++;
+      /* 价格对比：prev_price_jpy 只表示「上一轮的价格」，本轮价格没变就删掉。
+         钉钉汇总靠它判断「这张卡刚改过价」，播完下一轮自然消失，不会重复播（她 11-20 要的）。
+         注意：日区本来就按 updated 时间收窗（老商品改价也会重新进来），所以改价能抓到这里。 */
+      const op = Number(old.price_jpy) || 0, np = Number(it.price_jpy) || 0;
+      if (op > 0 && np > 0 && op !== np) { it.prev_price_jpy = op; priceChg++; }
+      else if (it.prev_price_jpy) delete it.prev_price_jpy;
+    } else if (it.prev_price_jpy) {
+      delete it.prev_price_jpy;
     }
     bag.set(String(it.id), it);
   }
+  if (priceChg) log('本轮改价 ' + priceChg + ' 条');
 
   // ③ 判售
   if (canSync) {
@@ -421,7 +430,8 @@ function buildSnap(prev, fresh, liveIds, canSync, runRow) {
     items,
     runs,
     sold_now: soldNow,
-    back_on: backOn
+    back_on: backOn,
+    price_chg: priceChg
   };
 }
 
