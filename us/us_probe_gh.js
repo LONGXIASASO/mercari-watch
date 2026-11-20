@@ -64,7 +64,8 @@ const log = (...a) => console.log('[probe]', ...a);
     if (!s) continue;
     const o = JSON.parse(s);
     if (o.t !== lastTitle) { log(`[${t}s] webdriver=${o.w} cards=${o.n} title="${o.t.slice(0, 60)}"`); lastTitle = o.t; }
-    if (!/moment|just a/i.test(o.t) && (o.n > 0 || /^Shop /i.test(o.t))) { passed = true; log(`[${t}s] ✅ 通过`); break; }
+    if (!/moment|just a/i.test(o.t) && (o.n > 0 || /^Shop /i.test(o.t))) { passed = true; log(`[${t}s] ✅ 通过`); }
+    if (passed && o.n > 0) { log(`[${t}s] 卡片已渲染 ${o.n} 个`); break; }
   }
 
   if (!passed) {
@@ -73,9 +74,20 @@ const log = (...a) => console.log('[probe]', ...a);
     ws.close(); child.kill(); process.exit(1);
   }
 
+  // 等商品真正渲染出来
+  for (let i = 0; i < 15; i++) {
+    const n = await evalJs(`document.querySelectorAll('[data-productid]').length`);
+    if (n > 0) { log('卡片数:', n); break; }
+    await sleep(2000);
+  }
   for (let i = 0; i < 2; i++) { await evalJs('window.scrollTo(0,document.body.scrollHeight);1'); await sleep(2200); }
 
-  const bodies = events.filter(e => e.method === 'Network.responseReceived' && /searchFacetQuery/.test(e.params.response.url));
+  // 先看看这一轮到底打了哪些 api
+  const apiCalls = events.filter(e => e.method === 'Network.responseReceived' && /\/v1\/api/.test(e.params.response.url))
+    .map(e => e.params.response.url.replace('https://www.mercari.com/v1/api', '').slice(0, 120));
+  log('API 调用种类:', [...new Set(apiCalls)].join(' | ') || '(无)');
+
+  const bodies = events.filter(e => e.method === 'Network.responseReceived' && /searchFacetQuery|searchQuery/.test(e.params.response.url));
   let items = [];
   for (const b of bodies) {
     try {
@@ -84,6 +96,16 @@ const log = (...a) => console.log('[probe]', ...a);
       const s = j && j.data && j.data.search;
       if (s && Array.isArray(s.itemsList)) items = items.concat(s.itemsList);
     } catch (e) { }
+  }
+
+  // 兜底：接口没抓到就直接读 DOM
+  if (!items.length) {
+    log('接口没抓到，改读 DOM');
+    const dom = await evalJs(`JSON.stringify([...document.querySelectorAll('[data-productid]')].slice(0,12).map(el=>{
+      const a=el.closest('a')||el; 
+      return {id:el.getAttribute('data-productid'), href:a.getAttribute('href')||'', text:(el.innerText||'').replace(/\\s+/g,' ').trim().slice(0,120)};
+    }))`);
+    log('DOM 抽样:', dom);
   }
 
   log('商品条数:', items.length);
