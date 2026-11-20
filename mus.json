@@ -1,6 +1,6 @@
 {
- "at": "2026-11-20T06:56:54.000Z",
- "at_cn": "11/20 14:56",
+ "at": "2026-11-20T07:03:07.000Z",
+ "at_cn": "11/20 15:03",
  "window_hours": 72,
  "rate": 7.2,
  "fee": 7,
@@ -11,7 +11,8 @@
    "name_cn": "",
    "price_usd": 4,
    "orig_price_usd": 4,
-   "daiqie": 35.8,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
    "created_ts": 1795153602,
    "updated_ts": 1795153602,
    "list_ts": 1795153602,
@@ -23,7 +24,8 @@
    "seller": "jords",
    "seller_id": 214267295,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4
   },
   {
    "id": "m28773420358",
@@ -31,7 +33,8 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
-   "daiqie": 43,
+   "ship_usd": 0.49,
+   "daiqie": 46.5,
    "created_ts": 1795152730,
    "updated_ts": 1795152730,
    "list_ts": 1795152730,
@@ -43,7 +46,8 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m43207609962",
@@ -51,7 +55,8 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
-   "daiqie": 43,
+   "ship_usd": 0.49,
+   "daiqie": 46.5,
    "created_ts": 1795152567,
    "updated_ts": 1795152567,
    "list_ts": 1795152567,
@@ -63,7 +68,8 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m21500061645",
@@ -71,6 +77,7 @@
    "name_cn": "",
    "price_usd": 29,
    "orig_price_usd": 29,
+   "ship_usd": null,
    "daiqie": 215.8,
    "created_ts": 1795152323,
    "updated_ts": 1795152323,
@@ -83,7 +90,8 @@
    "seller": "☆Please read my bio☆",
    "seller_id": 570093996,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 29
   },
   {
    "id": "m67594980979",
@@ -91,7 +99,8 @@
    "name_cn": "",
    "price_usd": 5.5,
    "orig_price_usd": 5.5,
-   "daiqie": 46.6,
+   "ship_usd": 0.49,
+   "daiqie": 50.1,
    "created_ts": 1795151602,
    "updated_ts": 1795151602,
    "list_ts": 1795151602,
@@ -103,7 +112,8 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5.5
   },
   {
    "id": "m56986259426",
@@ -111,6 +121,7 @@
    "name_cn": "",
    "price_usd": 20,
    "orig_price_usd": 20,
+   "ship_usd": 0,
    "daiqie": 151,
    "created_ts": 1795149458,
    "updated_ts": 1795149458,
@@ -123,7 +134,8 @@
    "seller": "bingsusu",
    "seller_id": 180714328,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 20
   },
   {
    "id": "m93340777218",
@@ -131,6 +143,7 @@
    "name_cn": "",
    "price_usd": 10,
    "orig_price_usd": 10,
+   "ship_usd": 0,
    "daiqie": 79,
    "created_ts": 1795149067,
    "updated_ts": 1795149067,
@@ -143,7 +156,8 @@
    "seller": "bingsusu",
    "seller_id": 180714328,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10
   },
   {
    "id": "m19861471497",
@@ -151,7 +165,8 @@
    "name_cn": "",
    "price_usd": 12,
    "orig_price_usd": 12,
-   "daiqie": 93.4,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1795147284,
    "updated_ts": 1795147284,
    "list_ts": 1795147284,
@@ -163,7 +178,8 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 12
   },
   {
    "id": "m16351028207",
@@ -171,7 +187,8 @@
    "name_cn": "",
    "price_usd": 8.5,
    "orig_price_usd": 8.5,
-   "daiqie": 68.2,
+   "ship_usd": 5.39,
+   "daiqie": 107,
    "created_ts": 1795141699,
    "updated_ts": 1795141699,
    "list_ts": 1795141699,
@@ -183,7 +200,8 @@
    "seller": "K & L",
    "seller_id": 878897059,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.5
   },
   {
    "id": "m23146281274",
@@ -191,7 +209,8 @@
    "name_cn": "",
    "price_usd": 4,
    "orig_price_usd": 4,
-   "daiqie": 35.8,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
    "created_ts": 1795122757,
    "updated_ts": 1795122757,
    "list_ts": 1795122757,
@@ -203,7 +222,8 @@
    "seller": "strawbeary",
    "seller_id": 234033564,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4
   },
   {
    "id": "m80970897496",
@@ -211,6 +231,7 @@
    "name_cn": "",
    "price_usd": 15,
    "orig_price_usd": 15,
+   "ship_usd": 0,
    "daiqie": 115,
    "created_ts": 1795117537,
    "updated_ts": 1795117537,
@@ -223,7 +244,8 @@
    "seller": "shazzi",
    "seller_id": 784316310,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15
   },
   {
    "id": "m21209914582",
@@ -231,6 +253,7 @@
    "name_cn": "",
    "price_usd": 15,
    "orig_price_usd": 15,
+   "ship_usd": null,
    "daiqie": 115,
    "created_ts": 1795116250,
    "updated_ts": 1795116250,
@@ -243,7 +266,8 @@
    "seller": "krystalgeneration",
    "seller_id": 872929336,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15
   },
   {
    "id": "m29551452290",
@@ -251,6 +275,7 @@
    "name_cn": "",
    "price_usd": 28,
    "orig_price_usd": 28,
+   "ship_usd": null,
    "daiqie": 208.6,
    "created_ts": 1795103614,
    "updated_ts": 1795103614,
@@ -263,7 +288,8 @@
    "seller": "☆Please read my bio☆",
    "seller_id": 570093996,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 28
   },
   {
    "id": "m13060587534",
@@ -271,7 +297,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045832,
    "updated_ts": 1795045832,
    "list_ts": 1795045832,
@@ -283,7 +310,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m56163744683",
@@ -291,7 +319,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045829,
    "updated_ts": 1795045829,
    "list_ts": 1795045829,
@@ -303,7 +332,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m65348042398",
@@ -311,7 +341,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045825,
    "updated_ts": 1795045825,
    "list_ts": 1795045825,
@@ -323,7 +354,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m93187829127",
@@ -331,7 +363,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045824,
    "updated_ts": 1795045824,
    "list_ts": 1795045824,
@@ -343,7 +376,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m64243026815",
@@ -351,7 +385,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045819,
    "updated_ts": 1795045819,
    "list_ts": 1795045819,
@@ -363,7 +398,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m61703297628",
@@ -371,7 +407,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045816,
    "updated_ts": 1795045816,
    "list_ts": 1795045816,
@@ -383,7 +420,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m96349559688",
@@ -391,7 +429,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045813,
    "updated_ts": 1795045813,
    "list_ts": 1795045813,
@@ -403,7 +442,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m69032322119",
@@ -411,7 +451,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045810,
    "updated_ts": 1795045810,
    "list_ts": 1795045810,
@@ -423,7 +464,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m40991699210",
@@ -431,7 +473,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045803,
    "updated_ts": 1795045803,
    "list_ts": 1795045803,
@@ -443,7 +486,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m26950893654",
@@ -451,7 +495,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045799,
    "updated_ts": 1795045799,
    "list_ts": 1795045799,
@@ -463,7 +508,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m14610258877",
@@ -471,7 +517,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045796,
    "updated_ts": 1795045796,
    "list_ts": 1795045796,
@@ -483,7 +530,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m30912579022",
@@ -491,7 +539,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045792,
    "updated_ts": 1795045792,
    "list_ts": 1795045792,
@@ -503,7 +552,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m38243158193",
@@ -511,7 +561,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045788,
    "updated_ts": 1795045788,
    "list_ts": 1795045788,
@@ -523,7 +574,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m86534590940",
@@ -531,7 +583,8 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
-   "daiqie": 71.7,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1795045785,
    "updated_ts": 1795045785,
    "list_ts": 1795045785,
@@ -543,7 +596,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m50282440932",
@@ -551,6 +605,7 @@
    "name_cn": "",
    "price_usd": 22.99,
    "orig_price_usd": 22.99,
+   "ship_usd": null,
    "daiqie": 172.5,
    "created_ts": 1795044698,
    "updated_ts": 1795044698,
@@ -563,7 +618,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 22.99
   },
   {
    "id": "m45943539508",
@@ -571,7 +627,8 @@
    "name_cn": "",
    "price_usd": 7.99,
    "orig_price_usd": 7.99,
-   "daiqie": 64.5,
+   "ship_usd": 0.49,
+   "daiqie": 68.1,
    "created_ts": 1795044426,
    "updated_ts": 1795044426,
    "list_ts": 1795044426,
@@ -583,7 +640,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7.99
   },
   {
    "id": "m58147844434",
@@ -591,7 +649,8 @@
    "name_cn": "",
    "price_usd": 9.49,
    "orig_price_usd": 9.49,
-   "daiqie": 75.3,
+   "ship_usd": 0.49,
+   "daiqie": 78.9,
    "created_ts": 1795044253,
    "updated_ts": 1795044253,
    "list_ts": 1795044253,
@@ -603,7 +662,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9.49
   },
   {
    "id": "m36949858643",
@@ -611,7 +671,8 @@
    "name_cn": "",
    "price_usd": 10.99,
    "orig_price_usd": 11.99,
-   "daiqie": 86.1,
+   "ship_usd": 0.49,
+   "daiqie": 89.7,
    "created_ts": 1795041148,
    "updated_ts": 1795041148,
    "list_ts": 1795041148,
@@ -623,7 +684,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.99
   },
   {
    "id": "m92283515235",
@@ -631,7 +693,8 @@
    "name_cn": "",
    "price_usd": 11.99,
    "orig_price_usd": 11.99,
-   "daiqie": 93.3,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1795040444,
    "updated_ts": 1795040444,
    "list_ts": 1795040444,
@@ -643,7 +706,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.99
   },
   {
    "id": "m10303447571",
@@ -651,7 +715,8 @@
    "name_cn": "",
    "price_usd": 12.99,
    "orig_price_usd": 12.99,
-   "daiqie": 100.5,
+   "ship_usd": 0.49,
+   "daiqie": 104.1,
    "created_ts": 1795040440,
    "updated_ts": 1795040440,
    "list_ts": 1795040440,
@@ -663,7 +728,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 12.99
   },
   {
    "id": "m47409678776",
@@ -671,6 +737,7 @@
    "name_cn": "",
    "price_usd": 38,
    "orig_price_usd": 40,
+   "ship_usd": 0,
    "daiqie": 280.6,
    "created_ts": 1794986089,
    "updated_ts": 1794986089,
@@ -683,7 +750,8 @@
    "seller": "risgyunini",
    "seller_id": 409619477,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 38
   },
   {
    "id": "m56349544858",
@@ -691,7 +759,8 @@
    "name_cn": "",
    "price_usd": 15,
    "orig_price_usd": 15,
-   "daiqie": 115,
+   "ship_usd": 0.49,
+   "daiqie": 118.5,
    "created_ts": 1794971301,
    "updated_ts": 1794971301,
    "list_ts": 1794971301,
@@ -703,7 +772,8 @@
    "seller": "\\u003C33",
    "seller_id": 776374124,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15
   },
   {
    "id": "m34142621764",
@@ -711,6 +781,7 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
+   "ship_usd": 0,
    "daiqie": 28.6,
    "created_ts": 1794964644,
    "updated_ts": 1794964644,
@@ -723,7 +794,8 @@
    "seller": "Madison",
    "seller_id": 677890707,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m88472118060",
@@ -731,6 +803,7 @@
    "name_cn": "",
    "price_usd": 4.5,
    "orig_price_usd": 6,
+   "ship_usd": 0,
    "daiqie": 39.4,
    "created_ts": 1794963039,
    "updated_ts": 1794963039,
@@ -743,7 +816,8 @@
    "seller": "madi_sweets",
    "seller_id": 584516071,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4.5
   },
   {
    "id": "m45592585600",
@@ -751,6 +825,7 @@
    "name_cn": "",
    "price_usd": 28.5,
    "orig_price_usd": 28.5,
+   "ship_usd": null,
    "daiqie": 212.2,
    "created_ts": 1794899502,
    "updated_ts": 1794899502,
@@ -763,7 +838,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 28.5
   },
   {
    "id": "m39334807877",
@@ -771,6 +847,7 @@
    "name_cn": "",
    "price_usd": 28.5,
    "orig_price_usd": 28.5,
+   "ship_usd": null,
    "daiqie": 212.2,
    "created_ts": 1794897898,
    "updated_ts": 1794897898,
@@ -783,7 +860,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 28.5
   },
   {
    "id": "m39832066729",
@@ -791,6 +869,7 @@
    "name_cn": "",
    "price_usd": 3.99,
    "orig_price_usd": 3.99,
+   "ship_usd": null,
    "daiqie": 35.7,
    "created_ts": 1794889356,
    "updated_ts": 1794889356,
@@ -803,7 +882,8 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3.99
   },
   {
    "id": "m11029421220",
@@ -811,6 +891,7 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
+   "ship_usd": null,
    "daiqie": 71.7,
    "created_ts": 1794889247,
    "updated_ts": 1794889247,
@@ -823,7 +904,8 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m54331210964",
@@ -831,7 +913,8 @@
    "name_cn": "",
    "price_usd": 7.22,
    "orig_price_usd": 8,
-   "daiqie": 59,
+   "ship_usd": 0.49,
+   "daiqie": 62.5,
    "created_ts": 1794884727,
    "updated_ts": 1794884727,
    "list_ts": 1794884727,
@@ -843,7 +926,8 @@
    "seller": "Niniz (check bio)",
    "seller_id": 870871440,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7.22
   },
   {
    "id": "m84607501144",
@@ -851,6 +935,7 @@
    "name_cn": "",
    "price_usd": 32,
    "orig_price_usd": 32,
+   "ship_usd": null,
    "daiqie": 237.4,
    "created_ts": 1794884579,
    "updated_ts": 1794884579,
@@ -863,7 +948,8 @@
    "seller": "CrmPuffPowe(Read Bio",
    "seller_id": 835177325,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 32
   },
   {
    "id": "m53323669359",
@@ -871,6 +957,7 @@
    "name_cn": "",
    "price_usd": 18.05,
    "orig_price_usd": 20,
+   "ship_usd": null,
    "daiqie": 137,
    "created_ts": 1794860492,
    "updated_ts": 1794860492,
@@ -883,7 +970,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 18.05
   },
   {
    "id": "m48133221799",
@@ -891,6 +979,7 @@
    "name_cn": "",
    "price_usd": 7.22,
    "orig_price_usd": 8,
+   "ship_usd": null,
    "daiqie": 59,
    "created_ts": 1794860451,
    "updated_ts": 1794860451,
@@ -903,7 +992,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7.22
   },
   {
    "id": "m16091658124",
@@ -911,6 +1001,7 @@
    "name_cn": "",
    "price_usd": 6.32,
    "orig_price_usd": 7,
+   "ship_usd": null,
    "daiqie": 52.5,
    "created_ts": 1794859929,
    "updated_ts": 1794859929,
@@ -923,7 +1014,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6.32
   },
   {
    "id": "m75518194800",
@@ -931,6 +1023,7 @@
    "name_cn": "",
    "price_usd": 9.03,
    "orig_price_usd": 10,
+   "ship_usd": null,
    "daiqie": 72,
    "created_ts": 1794859868,
    "updated_ts": 1794859868,
@@ -943,7 +1036,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9.03
   },
   {
    "id": "m15867507417",
@@ -951,6 +1045,7 @@
    "name_cn": "",
    "price_usd": 6.32,
    "orig_price_usd": 7,
+   "ship_usd": null,
    "daiqie": 52.5,
    "created_ts": 1794859837,
    "updated_ts": 1794859837,
@@ -963,7 +1058,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6.32
   },
   {
    "id": "m25442363830",
@@ -971,6 +1067,7 @@
    "name_cn": "",
    "price_usd": 13.54,
    "orig_price_usd": 15,
+   "ship_usd": null,
    "daiqie": 104.5,
    "created_ts": 1794859796,
    "updated_ts": 1794859796,
@@ -983,7 +1080,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 13.54
   },
   {
    "id": "m78155453370",
@@ -991,6 +1089,7 @@
    "name_cn": "",
    "price_usd": 13.54,
    "orig_price_usd": 15,
+   "ship_usd": null,
    "daiqie": 104.5,
    "created_ts": 1794859778,
    "updated_ts": 1794859778,
@@ -1003,7 +1102,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 13.54
   },
   {
    "id": "m61031578105",
@@ -1011,6 +1111,7 @@
    "name_cn": "",
    "price_usd": 7.22,
    "orig_price_usd": 8,
+   "ship_usd": null,
    "daiqie": 59,
    "created_ts": 1794859734,
    "updated_ts": 1794859734,
@@ -1023,7 +1124,8 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7.22
   },
   {
    "id": "m14402631928",
@@ -1031,6 +1133,7 @@
    "name_cn": "",
    "price_usd": 8.99,
    "orig_price_usd": 8.99,
+   "ship_usd": null,
    "daiqie": 71.7,
    "created_ts": 1794856954,
    "updated_ts": 1794856954,
@@ -1043,7 +1146,8 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.99
   },
   {
    "id": "m99429225515",
@@ -1051,7 +1155,8 @@
    "name_cn": "",
    "price_usd": 4,
    "orig_price_usd": 4,
-   "daiqie": 35.8,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
    "created_ts": 1794853113,
    "updated_ts": 1794853113,
    "list_ts": 1794853113,
@@ -1063,7 +1168,8 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4
   },
   {
    "id": "m77899973431",
@@ -1071,7 +1177,8 @@
    "name_cn": "",
    "price_usd": 10,
    "orig_price_usd": 10,
-   "daiqie": 79,
+   "ship_usd": 5.39,
+   "daiqie": 117.8,
    "created_ts": 1794848765,
    "updated_ts": 1794848765,
    "list_ts": 1794848765,
@@ -1083,7 +1190,8 @@
    "seller": "ultbhy",
    "seller_id": 377073895,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10
   },
   {
    "id": "m10522040797",
@@ -1091,6 +1199,7 @@
    "name_cn": "",
    "price_usd": 21.99,
    "orig_price_usd": 21.99,
+   "ship_usd": null,
    "daiqie": 165.3,
    "created_ts": 1794819762,
    "updated_ts": 1794819762,
@@ -1103,7 +1212,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 21.99
   },
   {
    "id": "m61900086631",
@@ -1111,7 +1221,8 @@
    "name_cn": "",
    "price_usd": 15.99,
    "orig_price_usd": 15.99,
-   "daiqie": 122.1,
+   "ship_usd": 0.49,
+   "daiqie": 125.7,
    "created_ts": 1794819383,
    "updated_ts": 1794819383,
    "list_ts": 1794819383,
@@ -1123,7 +1234,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15.99
   },
   {
    "id": "m91688266667",
@@ -1131,7 +1243,8 @@
    "name_cn": "",
    "price_usd": 14.99,
    "orig_price_usd": 14.99,
-   "daiqie": 114.9,
+   "ship_usd": 0.49,
+   "daiqie": 118.5,
    "created_ts": 1794819288,
    "updated_ts": 1794819288,
    "list_ts": 1794819288,
@@ -1143,7 +1256,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 14.99
   },
   {
    "id": "m56328920886",
@@ -1151,7 +1265,8 @@
    "name_cn": "",
    "price_usd": 13.99,
    "orig_price_usd": 13.99,
-   "daiqie": 107.7,
+   "ship_usd": 0.49,
+   "daiqie": 111.3,
    "created_ts": 1794818723,
    "updated_ts": 1794818723,
    "list_ts": 1794818723,
@@ -1163,7 +1278,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 13.99
   },
   {
    "id": "m47627129651",
@@ -1171,7 +1287,8 @@
    "name_cn": "",
    "price_usd": 11.99,
    "orig_price_usd": 11.99,
-   "daiqie": 93.3,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1794818254,
    "updated_ts": 1794818254,
    "list_ts": 1794818254,
@@ -1183,7 +1300,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.99
   },
   {
    "id": "m92265515762",
@@ -1191,7 +1309,8 @@
    "name_cn": "",
    "price_usd": 12.99,
    "orig_price_usd": 12.99,
-   "daiqie": 100.5,
+   "ship_usd": 0.49,
+   "daiqie": 104.1,
    "created_ts": 1794817907,
    "updated_ts": 1794817907,
    "list_ts": 1794817907,
@@ -1203,7 +1322,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 12.99
   },
   {
    "id": "m39417356971",
@@ -1211,7 +1331,8 @@
    "name_cn": "",
    "price_usd": 6.49,
    "orig_price_usd": 6.49,
-   "daiqie": 53.7,
+   "ship_usd": 0.49,
+   "daiqie": 57.3,
    "created_ts": 1794817360,
    "updated_ts": 1794817360,
    "list_ts": 1794817360,
@@ -1223,7 +1344,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6.49
   },
   {
    "id": "m71423483735",
@@ -1231,7 +1353,8 @@
    "name_cn": "",
    "price_usd": 19.99,
    "orig_price_usd": 19.99,
-   "daiqie": 150.9,
+   "ship_usd": 0.49,
+   "daiqie": 154.5,
    "created_ts": 1794816826,
    "updated_ts": 1794816826,
    "list_ts": 1794816826,
@@ -1243,7 +1366,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 19.99
   },
   {
    "id": "m14641423067",
@@ -1251,7 +1375,8 @@
    "name_cn": "",
    "price_usd": 11.99,
    "orig_price_usd": 11.99,
-   "daiqie": 93.3,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1794816644,
    "updated_ts": 1794816644,
    "list_ts": 1794816644,
@@ -1263,7 +1388,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.99
   },
   {
    "id": "m18420260499",
@@ -1271,7 +1397,8 @@
    "name_cn": "",
    "price_usd": 10.99,
    "orig_price_usd": 10.99,
-   "daiqie": 86.1,
+   "ship_usd": 0.49,
+   "daiqie": 89.7,
    "created_ts": 1794816493,
    "updated_ts": 1794816493,
    "list_ts": 1794816493,
@@ -1283,7 +1410,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.99
   },
   {
    "id": "m37271051827",
@@ -1291,7 +1419,8 @@
    "name_cn": "",
    "price_usd": 11.99,
    "orig_price_usd": 11.99,
-   "daiqie": 93.3,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1794816329,
    "updated_ts": 1794816329,
    "list_ts": 1794816329,
@@ -1303,7 +1432,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.99
   },
   {
    "id": "m41901759262",
@@ -1311,7 +1441,8 @@
    "name_cn": "",
    "price_usd": 11.49,
    "orig_price_usd": 11.49,
-   "daiqie": 89.7,
+   "ship_usd": 0.49,
+   "daiqie": 93.3,
    "created_ts": 1794815579,
    "updated_ts": 1794815579,
    "list_ts": 1794815579,
@@ -1323,7 +1454,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.49
   },
   {
    "id": "m57176441550",
@@ -1331,7 +1463,8 @@
    "name_cn": "",
    "price_usd": 6,
    "orig_price_usd": 6,
-   "daiqie": 50.2,
+   "ship_usd": 0.49,
+   "daiqie": 53.7,
    "created_ts": 1794788672,
    "updated_ts": 1794788672,
    "list_ts": 1794788672,
@@ -1343,7 +1476,8 @@
    "seller": "kay\\u003C3",
    "seller_id": 708999261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6
   },
   {
    "id": "m35198158086",
@@ -1351,7 +1485,8 @@
    "name_cn": "",
    "price_usd": 8.03,
    "orig_price_usd": 8.03,
-   "daiqie": 64.8,
+   "ship_usd": 0.49,
+   "daiqie": 68.3,
    "created_ts": 1794775270,
    "updated_ts": 1794775270,
    "list_ts": 1794775270,
@@ -1363,7 +1498,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.03
   },
   {
    "id": "m84986214884",
@@ -1371,7 +1507,8 @@
    "name_cn": "",
    "price_usd": 10.11,
    "orig_price_usd": 10.11,
-   "daiqie": 79.8,
+   "ship_usd": 0.49,
+   "daiqie": 83.3,
    "created_ts": 1794775214,
    "updated_ts": 1794775214,
    "list_ts": 1794775214,
@@ -1383,7 +1520,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.11
   },
   {
    "id": "m44859918898",
@@ -1391,7 +1529,8 @@
    "name_cn": "",
    "price_usd": 8,
    "orig_price_usd": 8,
-   "daiqie": 64.6,
+   "ship_usd": 0.49,
+   "daiqie": 68.1,
    "created_ts": 1794775185,
    "updated_ts": 1794775185,
    "list_ts": 1794775185,
@@ -1403,7 +1542,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8
   },
   {
    "id": "m61486043315",
@@ -1411,7 +1551,8 @@
    "name_cn": "",
    "price_usd": 8.03,
    "orig_price_usd": 8.03,
-   "daiqie": 64.8,
+   "ship_usd": 0.49,
+   "daiqie": 68.3,
    "created_ts": 1794775125,
    "updated_ts": 1794775125,
    "list_ts": 1794775125,
@@ -1423,7 +1564,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.03
   },
   {
    "id": "m37633478603",
@@ -1431,7 +1573,8 @@
    "name_cn": "",
    "price_usd": 8.03,
    "orig_price_usd": 8.03,
-   "daiqie": 64.8,
+   "ship_usd": 0.49,
+   "daiqie": 68.3,
    "created_ts": 1794775065,
    "updated_ts": 1794775065,
    "list_ts": 1794775065,
@@ -1443,7 +1586,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.03
   },
   {
    "id": "m60590574876",
@@ -1451,7 +1595,8 @@
    "name_cn": "",
    "price_usd": 8.03,
    "orig_price_usd": 8.03,
-   "daiqie": 64.8,
+   "ship_usd": 0.49,
+   "daiqie": 68.3,
    "created_ts": 1794774999,
    "updated_ts": 1794774999,
    "list_ts": 1794774999,
@@ -1463,7 +1608,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8.03
   },
   {
    "id": "m11509291539",
@@ -1471,7 +1617,8 @@
    "name_cn": "",
    "price_usd": 5.5,
    "orig_price_usd": 5.5,
-   "daiqie": 46.6,
+   "ship_usd": 0.49,
+   "daiqie": 50.1,
    "created_ts": 1794774927,
    "updated_ts": 1794774927,
    "list_ts": 1794774927,
@@ -1483,7 +1630,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5.5
   },
   {
    "id": "m90748852062",
@@ -1491,7 +1639,8 @@
    "name_cn": "",
    "price_usd": 9,
    "orig_price_usd": 9,
-   "daiqie": 71.8,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1794774851,
    "updated_ts": 1794774851,
    "list_ts": 1794774851,
@@ -1503,7 +1652,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9
   },
   {
    "id": "m62752032537",
@@ -1511,6 +1661,7 @@
    "name_cn": "",
    "price_usd": 4.28,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 37.8,
    "created_ts": 1794769078,
    "updated_ts": 1794769078,
@@ -1523,7 +1674,8 @@
    "seller": "purpleluv24",
    "seller_id": 228398959,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4.28
   },
   {
    "id": "m98395625589",
@@ -1531,7 +1683,8 @@
    "name_cn": "",
    "price_usd": 8,
    "orig_price_usd": 8,
-   "daiqie": 64.6,
+   "ship_usd": 0.49,
+   "daiqie": 68.1,
    "created_ts": 1794765550,
    "updated_ts": 1794765550,
    "list_ts": 1794765550,
@@ -1543,7 +1696,8 @@
    "seller": "lauraj_73",
    "seller_id": 476135226,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8
   },
   {
    "id": "m21234533862",
@@ -1551,6 +1705,7 @@
    "name_cn": "",
    "price_usd": 8,
    "orig_price_usd": 8,
+   "ship_usd": null,
    "daiqie": 64.6,
    "created_ts": 1794730178,
    "updated_ts": 1794730178,
@@ -1563,7 +1718,8 @@
    "seller": "Wintertwist",
    "seller_id": 327525905,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8
   },
   {
    "id": "m52355775806",
@@ -1571,7 +1727,8 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
-   "daiqie": 28.6,
+   "ship_usd": 0.49,
+   "daiqie": 32.1,
    "created_ts": 1794719205,
    "updated_ts": 1794719205,
    "list_ts": 1794719205,
@@ -1583,7 +1740,8 @@
    "seller": "Ariii",
    "seller_id": 485053681,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m69766054437",
@@ -1591,6 +1749,7 @@
    "name_cn": "",
    "price_usd": 22,
    "orig_price_usd": 22,
+   "ship_usd": null,
    "daiqie": 165.4,
    "created_ts": 1794714475,
    "updated_ts": 1794714475,
@@ -1603,7 +1762,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 22
   },
   {
    "id": "m55615324385",
@@ -1611,6 +1771,7 @@
    "name_cn": "",
    "price_usd": 30,
    "orig_price_usd": 30,
+   "ship_usd": null,
    "daiqie": 223,
    "created_ts": 1794714248,
    "updated_ts": 1794714248,
@@ -1623,7 +1784,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 30
   },
   {
    "id": "m24460044727",
@@ -1631,6 +1793,7 @@
    "name_cn": "",
    "price_usd": 15,
    "orig_price_usd": 15,
+   "ship_usd": null,
    "daiqie": 115,
    "created_ts": 1794714009,
    "updated_ts": 1794714009,
@@ -1643,7 +1806,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15
   },
   {
    "id": "m51033766695",
@@ -1651,6 +1815,7 @@
    "name_cn": "",
    "price_usd": 12,
    "orig_price_usd": 12,
+   "ship_usd": null,
    "daiqie": 93.4,
    "created_ts": 1794713819,
    "updated_ts": 1794713819,
@@ -1663,7 +1828,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 12
   },
   {
    "id": "m24060810817",
@@ -1671,6 +1837,7 @@
    "name_cn": "",
    "price_usd": 18,
    "orig_price_usd": 18,
+   "ship_usd": null,
    "daiqie": 136.6,
    "created_ts": 1794713647,
    "updated_ts": 1794713647,
@@ -1683,7 +1850,8 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 18
   },
   {
    "id": "m89053487006",
@@ -1691,7 +1859,8 @@
    "name_cn": "",
    "price_usd": 2.85,
    "orig_price_usd": 3,
-   "daiqie": 27.5,
+   "ship_usd": 0.49,
+   "daiqie": 31,
    "created_ts": 1794705103,
    "updated_ts": 1794705103,
    "list_ts": 1794705103,
@@ -1703,7 +1872,8 @@
    "seller": "Jihyo's Ball Pit",
    "seller_id": 773735359,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.85
   },
   {
    "id": "m97800046870",
@@ -1711,7 +1881,8 @@
    "name_cn": "",
    "price_usd": 9,
    "orig_price_usd": 10,
-   "daiqie": 71.8,
+   "ship_usd": 5.39,
+   "daiqie": 110.6,
    "created_ts": 1794694356,
    "updated_ts": 1794694356,
    "list_ts": 1794694356,
@@ -1723,7 +1894,8 @@
    "seller": "haobing",
    "seller_id": 356208502,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9
   },
   {
    "id": "m74179884912",
@@ -1731,6 +1903,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794684178,
    "updated_ts": 1794684178,
@@ -1743,7 +1916,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m85465055937",
@@ -1751,6 +1925,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794684122,
    "updated_ts": 1794684122,
@@ -1763,7 +1938,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m50508560684",
@@ -1771,6 +1947,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794684071,
    "updated_ts": 1794684071,
@@ -1783,7 +1960,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m62977806383",
@@ -1791,6 +1969,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794683943,
    "updated_ts": 1794683943,
@@ -1803,7 +1982,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m38765771900",
@@ -1811,6 +1991,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794683888,
    "updated_ts": 1794683888,
@@ -1823,7 +2004,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m90074706304",
@@ -1831,6 +2013,7 @@
    "name_cn": "",
    "price_usd": 23.99,
    "orig_price_usd": 23.99,
+   "ship_usd": null,
    "daiqie": 179.7,
    "created_ts": 1794642530,
    "updated_ts": 1794642530,
@@ -1843,7 +2026,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 23.99
   },
   {
    "id": "m94374330139",
@@ -1851,6 +2035,7 @@
    "name_cn": "",
    "price_usd": 23.99,
    "orig_price_usd": 23.99,
+   "ship_usd": null,
    "daiqie": 179.7,
    "created_ts": 1794641964,
    "updated_ts": 1794641964,
@@ -1863,7 +2048,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 23.99
   },
   {
    "id": "m54991880674",
@@ -1871,7 +2057,8 @@
    "name_cn": "",
    "price_usd": 16.99,
    "orig_price_usd": 16.99,
-   "daiqie": 129.3,
+   "ship_usd": 0.49,
+   "daiqie": 132.9,
    "created_ts": 1794641767,
    "updated_ts": 1794641767,
    "list_ts": 1794641767,
@@ -1883,7 +2070,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 16.99
   },
   {
    "id": "m92491650389",
@@ -1891,7 +2079,8 @@
    "name_cn": "",
    "price_usd": 15.99,
    "orig_price_usd": 15.99,
-   "daiqie": 122.1,
+   "ship_usd": 0.49,
+   "daiqie": 125.7,
    "created_ts": 1794641459,
    "updated_ts": 1794641459,
    "list_ts": 1794641459,
@@ -1903,7 +2092,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15.99
   },
   {
    "id": "m73361692319",
@@ -1911,7 +2101,8 @@
    "name_cn": "",
    "price_usd": 17.49,
    "orig_price_usd": 17.49,
-   "daiqie": 132.9,
+   "ship_usd": 0.49,
+   "daiqie": 136.5,
    "created_ts": 1794640953,
    "updated_ts": 1794640953,
    "list_ts": 1794640953,
@@ -1923,7 +2114,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 17.49
   },
   {
    "id": "m66000721620",
@@ -1931,7 +2123,8 @@
    "name_cn": "",
    "price_usd": 17.49,
    "orig_price_usd": 17.49,
-   "daiqie": 132.9,
+   "ship_usd": 0.49,
+   "daiqie": 136.5,
    "created_ts": 1794640935,
    "updated_ts": 1794640935,
    "list_ts": 1794640935,
@@ -1943,7 +2136,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 17.49
   },
   {
    "id": "m76910640641",
@@ -1951,7 +2145,8 @@
    "name_cn": "",
    "price_usd": 9.49,
    "orig_price_usd": 9.49,
-   "daiqie": 75.3,
+   "ship_usd": 0.49,
+   "daiqie": 78.9,
    "created_ts": 1794640316,
    "updated_ts": 1794640316,
    "list_ts": 1794640316,
@@ -1963,7 +2158,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9.49
   },
   {
    "id": "m60809665742",
@@ -1971,7 +2167,8 @@
    "name_cn": "",
    "price_usd": 9.49,
    "orig_price_usd": 9.49,
-   "daiqie": 75.3,
+   "ship_usd": 0.49,
+   "daiqie": 78.9,
    "created_ts": 1794640281,
    "updated_ts": 1794640281,
    "list_ts": 1794640281,
@@ -1983,7 +2180,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9.49
   },
   {
    "id": "m35703220438",
@@ -1991,7 +2189,8 @@
    "name_cn": "",
    "price_usd": 9.99,
    "orig_price_usd": 9.99,
-   "daiqie": 78.9,
+   "ship_usd": 0.49,
+   "daiqie": 82.5,
    "created_ts": 1794639755,
    "updated_ts": 1794639755,
    "list_ts": 1794639755,
@@ -2003,7 +2202,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9.99
   },
   {
    "id": "m77035302996",
@@ -2011,7 +2211,8 @@
    "name_cn": "",
    "price_usd": 15.99,
    "orig_price_usd": 15.99,
-   "daiqie": 122.1,
+   "ship_usd": 0.49,
+   "daiqie": 125.7,
    "created_ts": 1794639402,
    "updated_ts": 1794639402,
    "list_ts": 1794639402,
@@ -2023,7 +2224,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15.99
   },
   {
    "id": "m48201815693",
@@ -2031,7 +2233,8 @@
    "name_cn": "",
    "price_usd": 15.99,
    "orig_price_usd": 15.99,
-   "daiqie": 122.1,
+   "ship_usd": 0.49,
+   "daiqie": 125.7,
    "created_ts": 1794638750,
    "updated_ts": 1794638750,
    "list_ts": 1794638750,
@@ -2043,7 +2246,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 15.99
   },
   {
    "id": "m87522621071",
@@ -2051,7 +2255,8 @@
    "name_cn": "",
    "price_usd": 10.49,
    "orig_price_usd": 10.49,
-   "daiqie": 82.5,
+   "ship_usd": 0.49,
+   "daiqie": 86.1,
    "created_ts": 1794638311,
    "updated_ts": 1794638311,
    "list_ts": 1794638311,
@@ -2063,7 +2268,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.49
   },
   {
    "id": "m88381156950",
@@ -2071,7 +2277,8 @@
    "name_cn": "",
    "price_usd": 10.99,
    "orig_price_usd": 10.99,
-   "daiqie": 86.1,
+   "ship_usd": 0.49,
+   "daiqie": 89.7,
    "created_ts": 1794637377,
    "updated_ts": 1794637377,
    "list_ts": 1794637377,
@@ -2083,7 +2290,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.99
   },
   {
    "id": "m84033521169",
@@ -2091,7 +2299,8 @@
    "name_cn": "",
    "price_usd": 12.99,
    "orig_price_usd": 12.99,
-   "daiqie": 100.5,
+   "ship_usd": 0.49,
+   "daiqie": 104.1,
    "created_ts": 1794637195,
    "updated_ts": 1794637195,
    "list_ts": 1794637195,
@@ -2103,7 +2312,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 12.99
   },
   {
    "id": "m98735937189",
@@ -2111,6 +2321,7 @@
    "name_cn": "",
    "price_usd": 2.5,
    "orig_price_usd": 2.5,
+   "ship_usd": 0,
    "daiqie": 25,
    "created_ts": 1794606208,
    "updated_ts": 1794606208,
@@ -2123,7 +2334,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.5
   },
   {
    "id": "m88439265801",
@@ -2131,6 +2343,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794606145,
    "updated_ts": 1794606145,
@@ -2143,7 +2356,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m73950472469",
@@ -2151,6 +2365,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794606074,
    "updated_ts": 1794606074,
@@ -2163,7 +2378,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m75641453786",
@@ -2171,6 +2387,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794606021,
    "updated_ts": 1794606021,
@@ -2183,7 +2400,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m20659114266",
@@ -2191,6 +2409,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794605948,
    "updated_ts": 1794605948,
@@ -2203,7 +2422,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m17667442068",
@@ -2211,6 +2431,7 @@
    "name_cn": "",
    "price_usd": 2.5,
    "orig_price_usd": 2.5,
+   "ship_usd": 0,
    "daiqie": 25,
    "created_ts": 1794605880,
    "updated_ts": 1794605880,
@@ -2223,7 +2444,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.5
   },
   {
    "id": "m37958763202",
@@ -2231,6 +2453,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794605761,
    "updated_ts": 1794605761,
@@ -2243,7 +2466,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m75315966251",
@@ -2251,6 +2475,7 @@
    "name_cn": "",
    "price_usd": 2.5,
    "orig_price_usd": 2.5,
+   "ship_usd": 0,
    "daiqie": 25,
    "created_ts": 1794605714,
    "updated_ts": 1794605714,
@@ -2263,7 +2488,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.5
   },
   {
    "id": "m93769393129",
@@ -2271,6 +2497,7 @@
    "name_cn": "",
    "price_usd": 2.5,
    "orig_price_usd": 2.5,
+   "ship_usd": 0,
    "daiqie": 25,
    "created_ts": 1794605625,
    "updated_ts": 1794605625,
@@ -2283,7 +2510,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.5
   },
   {
    "id": "m88525311376",
@@ -2291,6 +2519,7 @@
    "name_cn": "",
    "price_usd": 2.5,
    "orig_price_usd": 2.5,
+   "ship_usd": 0,
    "daiqie": 25,
    "created_ts": 1794605561,
    "updated_ts": 1794605561,
@@ -2303,7 +2532,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2.5
   },
   {
    "id": "m24325242058",
@@ -2311,6 +2541,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794605496,
    "updated_ts": 1794605496,
@@ -2323,7 +2554,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m25436171458",
@@ -2331,6 +2563,7 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
+   "ship_usd": 0,
    "daiqie": 43,
    "created_ts": 1794605419,
    "updated_ts": 1794605419,
@@ -2343,7 +2576,8 @@
    "seller": "wonheenator",
    "seller_id": 330189899,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m62038494816",
@@ -2351,7 +2585,8 @@
    "name_cn": "",
    "price_usd": 9,
    "orig_price_usd": 9,
-   "daiqie": 71.8,
+   "ship_usd": 0.49,
+   "daiqie": 75.3,
    "created_ts": 1794602679,
    "updated_ts": 1794602679,
    "list_ts": 1794602679,
@@ -2363,7 +2598,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9
   },
   {
    "id": "m66778693750",
@@ -2371,7 +2607,8 @@
    "name_cn": "",
    "price_usd": 10.11,
    "orig_price_usd": 10.11,
-   "daiqie": 79.8,
+   "ship_usd": 0.49,
+   "daiqie": 83.3,
    "created_ts": 1794602627,
    "updated_ts": 1794602627,
    "list_ts": 1794602627,
@@ -2383,7 +2620,8 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.11
   },
   {
    "id": "m16748821967",
@@ -2391,7 +2629,8 @@
    "name_cn": "",
    "price_usd": 6,
    "orig_price_usd": 6,
-   "daiqie": 50.2,
+   "ship_usd": 0.49,
+   "daiqie": 53.7,
    "created_ts": 1794595877,
    "updated_ts": 1794595877,
    "list_ts": 1794595877,
@@ -2403,7 +2642,8 @@
    "seller": "Minmin",
    "seller_id": 959048177,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6
   },
   {
    "id": "m22972578174",
@@ -2411,7 +2651,8 @@
    "name_cn": "",
    "price_usd": 10.71,
    "orig_price_usd": 14,
-   "daiqie": 84.1,
+   "ship_usd": 0.49,
+   "daiqie": 87.6,
    "created_ts": 1794532006,
    "updated_ts": 1794532006,
    "list_ts": 1794532006,
@@ -2423,7 +2664,8 @@
    "seller": "and2dawn",
    "seller_id": 905417731,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10.71
   },
   {
    "id": "m46729696336",
@@ -2431,6 +2673,7 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3.6,
+   "ship_usd": null,
    "daiqie": 28.6,
    "created_ts": 1794531503,
    "updated_ts": 1794531503,
@@ -2443,7 +2686,8 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m23878459522",
@@ -2451,6 +2695,7 @@
    "name_cn": "",
    "price_usd": 5.6,
    "orig_price_usd": 5.6,
+   "ship_usd": null,
    "daiqie": 47.3,
    "created_ts": 1794531395,
    "updated_ts": 1794531395,
@@ -2463,7 +2708,8 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5.6
   },
   {
    "id": "m35743506437",
@@ -2471,6 +2717,7 @@
    "name_cn": "",
    "price_usd": 7,
    "orig_price_usd": 7,
+   "ship_usd": null,
    "daiqie": 57.4,
    "created_ts": 1794531018,
    "updated_ts": 1794531018,
@@ -2483,7 +2730,8 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7
   },
   {
    "id": "m48157070517",
@@ -2491,6 +2739,7 @@
    "name_cn": "",
    "price_usd": 9,
    "orig_price_usd": 10,
+   "ship_usd": 0,
    "daiqie": 71.8,
    "created_ts": 1794513933,
    "updated_ts": 1794513933,
@@ -2503,7 +2752,8 @@
    "seller": "AmandaMckenna",
    "seller_id": 121367327,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9
   },
   {
    "id": "m65755963117",
@@ -2511,6 +2761,7 @@
    "name_cn": "",
    "price_usd": 23.75,
    "orig_price_usd": 25,
+   "ship_usd": null,
    "daiqie": 178,
    "created_ts": 1794512867,
    "updated_ts": 1794512867,
@@ -2523,7 +2774,8 @@
    "seller": "yutami",
    "seller_id": 660209387,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 23.75
   },
   {
    "id": "m15348932260",
@@ -2531,6 +2783,7 @@
    "name_cn": "",
    "price_usd": 9,
    "orig_price_usd": 10,
+   "ship_usd": 0,
    "daiqie": 71.8,
    "created_ts": 1794512456,
    "updated_ts": 1794512456,
@@ -2543,7 +2796,8 @@
    "seller": "AmandaMckenna",
    "seller_id": 121367327,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 9
   },
   {
    "id": "m87021872933",
@@ -2551,7 +2805,8 @@
    "name_cn": "",
    "price_usd": 14.99,
    "orig_price_usd": 16.99,
-   "daiqie": 114.9,
+   "ship_usd": 0.49,
+   "daiqie": 118.5,
    "created_ts": 1794481435,
    "updated_ts": 1794481435,
    "list_ts": 1794481435,
@@ -2563,7 +2818,8 @@
    "seller": "citrusfairy :D",
    "seller_id": 555634183,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 14.99
   },
   {
    "id": "m34314150972",
@@ -2571,7 +2827,8 @@
    "name_cn": "",
    "price_usd": 11.99,
    "orig_price_usd": 11.99,
-   "daiqie": 93.3,
+   "ship_usd": 0.49,
+   "daiqie": 96.9,
    "created_ts": 1794475067,
    "updated_ts": 1794475067,
    "list_ts": 1794475067,
@@ -2583,7 +2840,8 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 11.99
   },
   {
    "id": "m11358575510",
@@ -2591,7 +2849,8 @@
    "name_cn": "",
    "price_usd": 5.5,
    "orig_price_usd": 5.5,
-   "daiqie": 46.6,
+   "ship_usd": 0.49,
+   "daiqie": 50.1,
    "created_ts": 1794470387,
    "updated_ts": 1794470387,
    "list_ts": 1794470387,
@@ -2603,7 +2862,8 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5.5
   },
   {
    "id": "m30072504081",
@@ -2611,7 +2871,8 @@
    "name_cn": "",
    "price_usd": 10,
    "orig_price_usd": 10,
-   "daiqie": 79,
+   "ship_usd": 0.49,
+   "daiqie": 82.5,
    "created_ts": 1794470263,
    "updated_ts": 1794470263,
    "list_ts": 1794470263,
@@ -2623,7 +2884,8 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 10
   },
   {
    "id": "m84749819772",
@@ -2631,6 +2893,7 @@
    "name_cn": "",
    "price_usd": 23,
    "orig_price_usd": 23,
+   "ship_usd": null,
    "daiqie": 172.6,
    "created_ts": 1794470086,
    "updated_ts": 1794470086,
@@ -2643,7 +2906,8 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 23
   },
   {
    "id": "m95518109795",
@@ -2651,6 +2915,7 @@
    "name_cn": "",
    "price_usd": 75,
    "orig_price_usd": 75,
+   "ship_usd": null,
    "daiqie": 547,
    "created_ts": 1794452012,
    "updated_ts": 1794452012,
@@ -2663,7 +2928,8 @@
    "seller": "Lacemelody",
    "seller_id": 487727195,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 75
   },
   {
    "id": "m50603956623",
@@ -2671,7 +2937,8 @@
    "name_cn": "",
    "price_usd": 8,
    "orig_price_usd": 8,
-   "daiqie": 64.6,
+   "ship_usd": 0.49,
+   "daiqie": 68.1,
    "created_ts": 1794451026,
    "updated_ts": 1794451026,
    "list_ts": 1794451026,
@@ -2683,7 +2950,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8
   },
   {
    "id": "m21687149344",
@@ -2691,7 +2959,8 @@
    "name_cn": "",
    "price_usd": 4,
    "orig_price_usd": 4,
-   "daiqie": 35.8,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
    "created_ts": 1794450396,
    "updated_ts": 1794450396,
    "list_ts": 1794450396,
@@ -2703,7 +2972,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4
   },
   {
    "id": "m65338357388",
@@ -2711,7 +2981,8 @@
    "name_cn": "",
    "price_usd": 7,
    "orig_price_usd": 7,
-   "daiqie": 57.4,
+   "ship_usd": 0.49,
+   "daiqie": 60.9,
    "created_ts": 1794449676,
    "updated_ts": 1794449676,
    "list_ts": 1794449676,
@@ -2723,7 +2994,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 7
   },
   {
    "id": "m18913265063",
@@ -2731,7 +3003,8 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
-   "daiqie": 28.6,
+   "ship_usd": 0.49,
+   "daiqie": 32.1,
    "created_ts": 1794449348,
    "updated_ts": 1794449348,
    "list_ts": 1794449348,
@@ -2743,7 +3016,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m18245268709",
@@ -2751,7 +3025,8 @@
    "name_cn": "",
    "price_usd": 8,
    "orig_price_usd": 8,
-   "daiqie": 64.6,
+   "ship_usd": 0.49,
+   "daiqie": 68.1,
    "created_ts": 1794448917,
    "updated_ts": 1794448917,
    "list_ts": 1794448917,
@@ -2763,7 +3038,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 8
   },
   {
    "id": "m59006490788",
@@ -2771,7 +3047,8 @@
    "name_cn": "",
    "price_usd": 1,
    "orig_price_usd": 1,
-   "daiqie": 14.2,
+   "ship_usd": 0.49,
+   "daiqie": 17.7,
    "created_ts": 1794448536,
    "updated_ts": 1794448536,
    "list_ts": 1794448536,
@@ -2783,7 +3060,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 1
   },
   {
    "id": "m86714075255",
@@ -2791,7 +3069,8 @@
    "name_cn": "",
    "price_usd": 2,
    "orig_price_usd": 2,
-   "daiqie": 21.4,
+   "ship_usd": 0.49,
+   "daiqie": 24.9,
    "created_ts": 1794448506,
    "updated_ts": 1794448506,
    "list_ts": 1794448506,
@@ -2803,7 +3082,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2
   },
   {
    "id": "m78357477052",
@@ -2811,7 +3091,8 @@
    "name_cn": "",
    "price_usd": 4,
    "orig_price_usd": 4,
-   "daiqie": 35.8,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
    "created_ts": 1794447869,
    "updated_ts": 1794447869,
    "list_ts": 1794447869,
@@ -2823,7 +3104,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 4
   },
   {
    "id": "m48934904925",
@@ -2831,7 +3113,8 @@
    "name_cn": "",
    "price_usd": 6,
    "orig_price_usd": 6,
-   "daiqie": 50.2,
+   "ship_usd": 0.49,
+   "daiqie": 53.7,
    "created_ts": 1794447110,
    "updated_ts": 1794447110,
    "list_ts": 1794447110,
@@ -2843,7 +3126,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 6
   },
   {
    "id": "m87039800806",
@@ -2851,7 +3135,8 @@
    "name_cn": "",
    "price_usd": 1,
    "orig_price_usd": 1,
-   "daiqie": 14.2,
+   "ship_usd": 0.49,
+   "daiqie": 17.7,
    "created_ts": 1794446797,
    "updated_ts": 1794446797,
    "list_ts": 1794446797,
@@ -2863,7 +3148,8 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 1
   },
   {
    "id": "m72108699544",
@@ -2871,6 +3157,7 @@
    "name_cn": "",
    "price_usd": 25,
    "orig_price_usd": 25,
+   "ship_usd": null,
    "daiqie": 187,
    "created_ts": 1794442711,
    "updated_ts": 1794442711,
@@ -2883,7 +3170,8 @@
    "seller": "Kiran",
    "seller_id": 814674035,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 25
   },
   {
    "id": "m85612522094",
@@ -2891,6 +3179,7 @@
    "name_cn": "",
    "price_usd": 25,
    "orig_price_usd": 25,
+   "ship_usd": null,
    "daiqie": 187,
    "created_ts": 1794430662,
    "updated_ts": 1794430662,
@@ -2903,7 +3192,8 @@
    "seller": "starstashco",
    "seller_id": 343858330,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 25
   },
   {
    "id": "m83943611945",
@@ -2911,7 +3201,8 @@
    "name_cn": "",
    "price_usd": 18.5,
    "orig_price_usd": 18.5,
-   "daiqie": 140.2,
+   "ship_usd": 0.49,
+   "daiqie": 143.7,
    "created_ts": 1794416161,
    "updated_ts": 1794416161,
    "list_ts": 1794416161,
@@ -2923,7 +3214,8 @@
    "seller": "(Read Bio) ttsand",
    "seller_id": 408694463,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 18.5
   },
   {
    "id": "m65613468128",
@@ -2931,7 +3223,8 @@
    "name_cn": "",
    "price_usd": 2,
    "orig_price_usd": 2,
-   "daiqie": 21.4,
+   "ship_usd": 0.49,
+   "daiqie": 24.9,
    "created_ts": 1794389120,
    "updated_ts": 1794389120,
    "list_ts": 1794389120,
@@ -2943,7 +3236,8 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 2
   },
   {
    "id": "m66853831542",
@@ -2951,7 +3245,8 @@
    "name_cn": "",
    "price_usd": 5,
    "orig_price_usd": 5,
-   "daiqie": 43,
+   "ship_usd": 0.49,
+   "daiqie": 46.5,
    "created_ts": 1794362654,
    "updated_ts": 1794362654,
    "list_ts": 1794362654,
@@ -2963,7 +3258,8 @@
    "seller": "Kikii",
    "seller_id": 648251500,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 5
   },
   {
    "id": "m75681026923",
@@ -2971,7 +3267,8 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
-   "daiqie": 28.6,
+   "ship_usd": 0.49,
+   "daiqie": 32.1,
    "created_ts": 1794347646,
    "updated_ts": 1794347646,
    "list_ts": 1794347646,
@@ -2983,7 +3280,8 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m68408693452",
@@ -2991,6 +3289,7 @@
    "name_cn": "",
    "price_usd": 30,
    "orig_price_usd": 30,
+   "ship_usd": null,
    "daiqie": 223,
    "created_ts": 1794347037,
    "updated_ts": 1794347037,
@@ -3003,7 +3302,8 @@
    "seller": "Secretyunhosociety",
    "seller_id": 559574006,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 30
   },
   {
    "id": "m29780795078",
@@ -3011,7 +3311,8 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
-   "daiqie": 28.6,
+   "ship_usd": 0.49,
+   "daiqie": 32.1,
    "created_ts": 1794346654,
    "updated_ts": 1794346654,
    "list_ts": 1794346654,
@@ -3023,7 +3324,8 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
   },
   {
    "id": "m32969755687",
@@ -3031,7 +3333,8 @@
    "name_cn": "",
    "price_usd": 3,
    "orig_price_usd": 3,
-   "daiqie": 28.6,
+   "ship_usd": 0.49,
+   "daiqie": 32.1,
    "created_ts": 1794346583,
    "updated_ts": 1794346583,
    "list_ts": 1794346583,
@@ -3043,10 +3346,195 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795157814
+   "last_seen": 1795158187,
+   "prev_price_usd": 3
+  },
+  {
+   "id": "m29138059105",
+   "name": "ZB1 YITS Zhang Hao Namil Official POB",
+   "name_cn": "",
+   "price_usd": 6.37,
+   "orig_price_usd": 6.37,
+   "ship_usd": 0,
+   "daiqie": 52.9,
+   "created_ts": 1770529729,
+   "updated_ts": 1770529729,
+   "list_ts": 1770529729,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m29138059105_1.jpg?1770532012&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m29138059105_1.jpg?1770532012",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "mattchurro",
+   "seller_id": 769302393,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m58033792390",
+   "name": "ZEROBASEONE ZB1 - Zhang Hao 장하오 - Timeless World Tour - Trading Photocard",
+   "name_cn": "",
+   "price_usd": 12.99,
+   "orig_price_usd": 14.99,
+   "ship_usd": 0.49,
+   "daiqie": 104.1,
+   "created_ts": 1769437414,
+   "updated_ts": 1769437414,
+   "list_ts": 1769437414,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m58033792390_1.jpg?1769608038&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m58033792390_1.jpg?1769608038",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m32937159828",
+   "name": "ZEROBASEONE ZB1 - Zhang Hao 장하오 - Timeless World Tour - Trading Photocard",
+   "name_cn": "",
+   "price_usd": 12.24,
+   "orig_price_usd": 14.99,
+   "ship_usd": 0.49,
+   "daiqie": 98.7,
+   "created_ts": 1768483267,
+   "updated_ts": 1768483267,
+   "list_ts": 1768483267,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m32937159828_1.jpg?1769550894&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m32937159828_1.jpg?1769550894",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m33893604318",
+   "name": "ZEROBASEONE ZB1 - Zhang Hao 장하오 - Timeless World Tour - Trading Photocard",
+   "name_cn": "",
+   "price_usd": 12.24,
+   "orig_price_usd": 14.99,
+   "ship_usd": 0.49,
+   "daiqie": 98.7,
+   "created_ts": 1768483190,
+   "updated_ts": 1768483190,
+   "list_ts": 1768483190,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m33893604318_1.jpg?1769550909&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m33893604318_1.jpg?1769550909",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m40269223047",
+   "name": "ZEROBASEONE - Zhang Hao 장하오 - Cinema Paradise - KTown4U Lucky Draw Photocard",
+   "name_cn": "",
+   "price_usd": 15.99,
+   "orig_price_usd": 24.99,
+   "ship_usd": 0.49,
+   "daiqie": 125.7,
+   "created_ts": 1762734053,
+   "updated_ts": 1762734053,
+   "list_ts": 1762734053,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m40269223047_1.jpg?1784235480&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m40269223047_1.jpg?1784235480",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m27910026119",
+   "name": "ZEROBASEONE - Zhang Hao 장하오 - Blue Paradise - Apple Music Lucky Draw Photocard",
+   "name_cn": "",
+   "price_usd": 19.99,
+   "orig_price_usd": 29.99,
+   "ship_usd": 0.49,
+   "daiqie": 154.5,
+   "created_ts": 1762733926,
+   "updated_ts": 1762733926,
+   "list_ts": 1762733926,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m27910026119_1.jpg?1769549181&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m27910026119_1.jpg?1769549181",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m79077138389",
+   "name": "ZEROBASEONE - Zhang Hao 장하오 - Blue Paradise Pop-up - MD Lucky Draw Photocard",
+   "name_cn": "",
+   "price_usd": 13.99,
+   "orig_price_usd": 19.99,
+   "ship_usd": 0.49,
+   "daiqie": 111.3,
+   "created_ts": 1762733661,
+   "updated_ts": 1762733661,
+   "list_ts": 1762733661,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m79077138389_1.jpg?1784235498&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m79077138389_1.jpg?1784235498",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "장하오",
+   "seller": "fantasists",
+   "seller_id": 174171590,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m68557576849",
+   "name": "ZB1 You Had Me at Hello Zhanghao Blue Dream Media POB photocard",
+   "name_cn": "",
+   "price_usd": 7.42,
+   "orig_price_usd": 12,
+   "ship_usd": null,
+   "daiqie": 60.4,
+   "created_ts": 1732929818,
+   "updated_ts": 1732929818,
+   "list_ts": 1732929818,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m68557576849_1.jpg?1732929818&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m68557576849_1.jpg?1732929818",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "章昊",
+   "seller": "C_svt",
+   "seller_id": 778481752,
+   "first_seen": 1795158187,
+   "last_seen": 1795158187,
+   "prev_price_usd": null
   }
  ],
  "runs": [
+  {
+   "ran_at": "2026-11-20T07:03:07.000Z",
+   "win_hours": 72,
+   "fetched": 275,
+   "matched": 160,
+   "fresh": 8,
+   "dropped": 0
+  },
   {
    "ran_at": "2026-11-20T06:56:54.000Z",
    "win_hours": 72,
@@ -3065,7 +3553,7 @@
   }
  ],
  "digest": {
-  "flushed_at": 1795157388,
-  "hour": "2026-11-20T06"
+  "flushed_at": 1795158187,
+  "hour": "2026-11-20T07"
  }
 }
