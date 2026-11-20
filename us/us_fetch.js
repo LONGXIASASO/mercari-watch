@@ -449,20 +449,27 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
   let all = [];
   try {
     const kws = KW_ONLY ? [KW_ONLY] : KEYWORDS;
+    // 刚过挑战的头一两个词经常抓到 0 条（结果还没渲染出来），
+    // 每轮把搜索顺序转一格，别让固定的两个词长期挨这一刀
+    const rot = kws.length > 1 ? Math.floor(nowSec() / 600) % kws.length : 0;
+    const order = kws.slice(rot).concat(kws.slice(0, rot));
     // 预热：先进首页把 Cloudflare 过掉，否则第一个关键词经常抓到 0 条
     const warm = await ensurePassed(env, 'https://www.mercari.com/');
     log('预热', warm.ok ? `${warm.sec}s 通过` : `失败(${warm.title})`);
     await sleep(2500);
-    for (const kw of kws) {
+    const zero = [];
+    for (const kw of order) {
       let r = await searchOne(env, kw);
-      if (!r.items.length) {            // 偶发空手：同会话再进一次基本就出数据
-        log(`   ${kw} 空手，重试一次`);
-        await sleep(1500);
+      for (let a = 0; a < 2 && !r.items.length; a++) {   // 偶发空手：同会话再进一两次基本就出数据
+        log(`   ${kw} 空手，第 ${a + 1} 次重试`);
+        await sleep(2000 + a * 2000);
         r = await searchOne(env, kw);
       }
+      if (!r.items.length) zero.push(kw);
       r.items.forEach(it => { it.__kw = kw; all.push(it); });
       await sleep(1200);
     }
+    if (zero.length) log('⚠️ 本轮零结果的词：' + zero.join(' / '));
 
     if (PROBE) {
       log('探测模式，商品抽样：');
@@ -488,6 +495,11 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
       return true;
     });
     log(`抓到 ${before} 条，标题不含章昊丢掉 ${droppedTitle} 条，余 ${all.length} 条`);
+
+    // 各搜索词最后留下多少（哪个词长期为 0 一眼能看出来）
+    const perKw = {};
+    all.forEach(it => { const k = it.__kw || '-'; perKw[k] = (perKw[k] || 0) + 1; });
+    log('各词留下：' + Object.entries(perKw).map(([k, v]) => `${k} ${v}`).join(' ｜ '));
 
     // 需要补运费的：新的 + 之前没拿到运费的
     const need = all.filter(it => {
