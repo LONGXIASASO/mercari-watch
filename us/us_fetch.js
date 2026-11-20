@@ -583,11 +583,17 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     log('各词留下：' + Object.entries(perKw).map(([k, v]) => `${k} ${v}`).join(' ｜ '));
 
     // 需要补运费的：新的 + 之前没拿到运费的
+    // ⚠️ 2026-11-20 修：这里原来写 `p.ship`，但快照字段叫 `ship_usd`，
+    //    于是「没有运费」永远成立 → 每轮都把全部 224 条详情页重抓一遍（约 45MB/轮，
+    //    一天上 6GB 机场流量）。字段名改对，再加一道「上架 6 小时内才重试」的闸。
     const need = all.filter(it => {
       const p = prevMap.get(it.id);
-      return !p || p.ship == null;
+      if (!p) return true;                       // 新卡：必须补
+      if (p.ship_usd != null) return false;      // 已有运费：跳过
+      // 一直拿不到运费的老卡，别每轮都去啃（详情页最费流量）
+      return (Number(it.created) || 0) > t0 - 6 * 3600;
     }).map(it => it.id);
-    log(`需补运费/卖家 ${need.length} 条`);
+    log(`需补运费/卖家 ${need.length} 条（共 ${all.length} 条，其余沿用上一轮）`);
 
     const extra = await enrich(env, need.slice(0, 300));
     env.close();
