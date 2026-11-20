@@ -307,7 +307,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
         name_cn: (p && p.name_cn) || '',
         price_usd: price,
         orig_price_usd: (Number(it.originalPrice) || 0) / 100 || price,
-        ship_usd: ship,
+        ship_usd: ship == null ? null : ship,
         daiqie: Number(daiqie(price, ship == null ? 0 : ship).toFixed(1)),
         created_ts: created,
         updated_ts: created,
