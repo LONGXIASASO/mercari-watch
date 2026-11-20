@@ -1,0 +1,89 @@
+name: 美区煤炉监控
+
+# 每 10 分钟抓一次美区煤炉（章昊小卡），结果写 mus.json 到 main。
+# 路由：订阅里的美国节点起 Xray → 真 Chrome（无自动化开关）+ CDP 过 Cloudflare。
+# 钉钉：每小时汇总一次（本 workflow 内判断小时切换，需要 secrets.DINGTALK_*）。
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+
+concurrency:
+  group: us-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 起 Xray（订阅里的美国节点）
+        env:
+          POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
+        run: |
+          set -o pipefail
+          curl -sSL -m 180 -o /tmp/xray.zip \
+            https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          mkdir -p /tmp/xray && unzip -oq /tmp/xray.zip -d /tmp/xray
+          chmod +x /tmp/xray/xray
+          node us/_sub2xray_us.js --out /tmp/xray.json --port 7891 2>&1 | head -20
+          if [ ! -s /tmp/xray.json ]; then echo "::error::订阅解析失败"; exit 1; fi
+          nohup /tmp/xray/xray -c /tmp/xray.json > /tmp/xray.log 2>&1 &
+          sleep 6
+
+      - name: 选美国出口
+        run: |
+          N=$(python3 -c "import json;print(len(json.load(open('/tmp/xray.json'))['inbounds']))")
+          PICK=""
+          for i in $(seq 0 $((N-1))); do
+            P=$((7891+i))
+            CC=$(curl -s -m 8 -x http://127.0.0.1:$P https://ipinfo.io/json \
+                 | python3 -c "import sys,json;print(json.load(sys.stdin).get('country',''))" 2>/dev/null || echo "")
+            echo "  :$P → ${CC:-x}"
+            if [ "$CC" = "US" ]; then PICK=$P; break; fi
+          done
+          if [ -z "$PICK" ]; then echo "::error::没有可用的美国节点"; exit 1; fi
+          echo "US_PROXY=http://127.0.0.1:$PICK" >> $GITHUB_ENV
+
+      - name: 装 Chrome
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb >/dev/null
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y -qq /tmp/chrome.deb >/dev/null
+          google-chrome --version
+
+      - name: 抓取
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          US_OUT: mus.json
+        run: |
+          xvfb-run -a --server-args="-screen 0 1366x900x24" node us/us_fetch.js
+
+      - name: 提交结果
+        run: |
+          git config user.name  "us-watch-bot"
+          git config user.email "us-watch-bot@users.noreply.github.com"
+          git add mus.json
+          if git diff --cached --quiet; then echo "无变化"; exit 0; fi
+          git commit -m "美区快照 $(date -u '+%m-%d %H:%M') UTC"
+          for i in 1 2 3; do
+            if git pull --rebase -X ours origin main && git push origin HEAD:main; then
+              echo "推送成功"; exit 0
+            fi
+            echo "第 $i 次推送失败，重试"; sleep 5
+          done
+          echo "::error::推送失败"; exit 1
