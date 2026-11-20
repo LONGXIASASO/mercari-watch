@@ -73,6 +73,13 @@ function titleOk(nm, kw) {
 
 const MAX_PER_KW = Number(process.env.US_MAX_PER_KW || 260);
 
+// 拦掉的资源类型（省机场流量）。只拦静态媒体，JS/CSS/XHR 一律放行，
+// 否则 Cloudflare 挑战跑不起来。US_BLOCK=0 可以整体关掉。
+const BLOCK_URLS = process.env.US_BLOCK === '0' ? [] : [
+  '*.jpg', '*.jpeg', '*.png', '*.webp', '*.gif', '*.svg', '*.ico', '*.avif',
+  '*.bmp', '*.mp4', '*.webm', '*.m3u8', '*.woff', '*.woff2', '*.ttf', '*.otf', '*.eot',
+];
+
 const HOURS = 72;          // 快照保留时长（小时）
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -101,6 +108,7 @@ async function cdpHttp(p) {
 function connect(wsUrl) {
   const ws = new WebSocket(wsUrl);
   let id = 0;
+  let bytes = 0;          // 本会话经浏览器下载的字节数（用来盯机场流量）
   const pending = new Map();
   const events = [];
   const send = (method, params = {}) => new Promise(res => {
@@ -111,10 +119,17 @@ function connect(wsUrl) {
   ws.onmessage = ev => {
     const d = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString());
     if (d.id && pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); return; }
-    if (d.method) events.push(d);
+    if (d.method) {
+      events.push(d);
+      if (d.method === 'Network.loadingFinished' && d.params && d.params.encodedDataLength) bytes += d.params.encodedDataLength;
+    }
   };
   const ready = new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
-  return { ws, send, events, ready };
+  return {
+    ws, send, events, ready,
+    bytes: () => bytes,
+    resetBytes: () => { bytes = 0; },
+  };
 }
 
 async function launch() {
@@ -131,6 +146,10 @@ async function launch() {
   const C = connect(page.webSocketDebuggerUrl);
   await C.ready;
   await C.send('Network.enable', { maxPostDataSize: 262144 });
+  // ⚠️ 机场流量大户就在这里：美区搜索页一次要拉几百张缩略图，
+  //    每轮 7 个词 × 整页资源 = 几十 MB，而我们要的只是 XHR 里的 JSON。
+  //    拦掉图片/字体/音视频（不动 JS/CSS，否则过不了 Cloudflare 挑战）。
+  try { await C.send('Network.setBlockedURLs', { urls: BLOCK_URLS }); } catch (e) { log('⚠️ 资源拦截没生效：' + e.message); }
   await C.send('Page.enable');
   const evalJs = async expr => {
     const r = await C.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
@@ -143,6 +162,7 @@ async function launch() {
 // ---------------------------------------------------------------- 过 Cloudflare
 async function ensurePassed(env, url) {
   env.C.events.length = 0;
+  env.C.resetBytes();
   await env.C.send('Page.navigate', { url });
   for (let t = 0; t < 40; t++) {
     await sleep(2000);
@@ -188,7 +208,7 @@ async function searchOne(env, kw) {
       bag.set(it.id, it);
     }
   }
-  log(`  ${kw}：${pass.sec}s 过挑战，收 ${bag.size} 条`);
+  log(`  ${kw}：${pass.sec}s 过挑战，收 ${bag.size} 条，流量 ${(env.C.bytes() / 1048576).toFixed(1)} MB`);
   return { kw, items: [...bag.values()], pass };
 }
 
@@ -516,6 +536,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     log('预热', warm.ok ? `${warm.sec}s 通过` : `失败(${warm.title})`);
     await sleep(2500);
     const zero = [];
+    let flowMB = 0;
     for (const kw of order) {
       let r = await searchOne(env, kw);
       for (let a = 0; a < 2 && !r.items.length; a++) {   // 偶发空手：同会话再进一两次基本就出数据
@@ -523,11 +544,13 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
         await sleep(2000 + a * 2000);
         r = await searchOne(env, kw);
       }
+      flowMB += env.C.bytes() / 1048576;
       if (!r.items.length) zero.push(kw);
       r.items.forEach(it => { it.__kw = kw; all.push(it); });
       await sleep(1200);
     }
     if (zero.length) log('⚠️ 本轮零结果的词：' + zero.join(' / '));
+    log(`本轮浏览器流量约 ${flowMB.toFixed(1)} MB（拦截：${BLOCK_URLS.length ? '图片/字体/音视频' : '关闭'}）`);
 
     if (PROBE) {
       log('探测模式，商品抽样：');
