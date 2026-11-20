@@ -65,10 +65,15 @@ jobs:
           sudo apt-get install -y -qq /tmp/chrome.deb >/dev/null
           google-chrome --version
 
+      # 钉钉汇总要把卡片拼成集合图，需要 sharp（有预编译二进制，约 10 秒）
+      - name: 安装 sharp（拼集合图用）
+        run: npm install sharp --no-save --no-audit --no-fund
+
       - name: 抓取
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           US_OUT: mus.json
         run: |
           xvfb-run -a --server-args="-screen 0 1366x900x24" node us/us_fetch.js
