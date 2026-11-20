@@ -34,6 +34,13 @@ const OUT = String(process.env.US_OUT || 'mus.json');
 const KW_ONLY = ARG('kw');
 const PROBE = HAS('probe');
 
+// 钉钉汇总用的常量
+const SITE = 'https://mercari-card-watch.app.workbuddy.host/us.html?sharecode=L2A6N4ATZQ';
+const JP_SITE = 'https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ';
+const SHEET_MAX = 20;      // 一张集合图最多 20 格
+const LINE_CAP = 22;       // 每条钉钉消息「卡片区」能用的元素行数
+const BYTE_CAP = 1800;     // 每条正文的字节预算（钉钉 markdown 超了会 errcode -1）
+
 // ── 监控词：美区卖家写英文，拼写五花八门；中文/韩文也扫一遍（用户 11-20 指定）──
 const KEYWORDS = [
   'zhanghao',
@@ -218,7 +225,7 @@ function dingSign(secret) {
   return { ts, sign: encodeURIComponent(sign) };
 }
 
-async function dingText(text) {
+async function dingSend(payload, tag) {
   const hook = process.env.DINGTALK_WEBHOOK;
   const secret = process.env.DINGTALK_SECRET;
   if (!hook) { log('未配置钉钉，跳过推送'); return false; }
@@ -226,11 +233,174 @@ async function dingText(text) {
   if (secret) { const s = dingSign(secret); url += `&timestamp=${s.ts}&sign=${s.sign}`; }
   const r = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ msgtype: 'text', text: { content: text } }),
+    body: JSON.stringify(payload),
   });
   const j = await r.json().catch(() => ({}));
-  log('钉钉推送:', r.status, j.errmsg || '');
+  log(`钉钉推送(${tag}):`, r.status, j.errmsg || '');
   return r.ok && (j.errcode === 0);
+}
+const dingText = t => dingSend({ msgtype: 'text', text: { content: t } }, 'text');
+const dingMd = (title, text) => dingSend({ msgtype: 'markdown', markdown: { title, text } }, 'md');
+
+// ---------------------------------------------------------------- 集合图 / 图片托管
+// 跟卡市（_poca_cloud/notify.js）同一套做法：把一批商品图拼成一张带序号徽章的网格图，
+// 传到仓库 main 的 us/notify/，钉钉 markdown 用 ![](url) 引。
+// ⚠️ 图片别放会被 force push 的分支，否则下一轮就 404；main 上的按 36 小时清理。
+const REPO = String(process.env.GH_REPO || 'LONGXIASASO/mercari-watch').trim();
+const GH_TOKEN = (process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
+const GH_API = `https://api.github.com/repos/${REPO}/contents/`;
+const IMG_DIR = 'us/notify';
+const IMG_KEEP_MS = 36 * 3600e3;
+
+const ghHeaders = () => ({
+  Authorization: 'Bearer ' + GH_TOKEN,
+  Accept: 'application/vnd.github+json',
+  'User-Agent': 'us-notify',
+  'Content-Type': 'application/json',
+});
+
+function rawGet(url, timeout = 20000) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const req = https.get(url, { timeout, headers: { 'User-Agent': 'Mozilla/5.0', Accept: '*/*' } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        const next = new URL(res.headers.location, url).href;
+        return rawGet(next, timeout).then(resolve);
+      }
+      const bufs = [];
+      res.on('data', c => bufs.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(bufs) }));
+    });
+    req.on('error', () => resolve({ status: 0, buf: Buffer.alloc(0) }));
+    req.on('timeout', () => { req.destroy(); resolve({ status: 0, buf: Buffer.alloc(0) }); });
+  });
+}
+
+// 美区的图在 mercdn.net，海外 runner 直连就行；直连空手再退 wsrv
+async function fetchImg(u) {
+  if (!u) return null;
+  const direct = await rawGet(u, 15000);
+  if (direct.status === 200 && direct.buf.length > 2000) return direct.buf;
+  const viaProxy = await rawGet('https://wsrv.nl/?url=' + encodeURIComponent(u) + '&w=360&output=jpg&q=80', 20000);
+  if (viaProxy.status === 200 && viaProxy.buf.length > 2000) return viaProxy.buf;
+  return null;
+}
+
+/**
+ * 把一批商品拼成一张网格图，左上角带序号徽章（序号与消息里的编号对应）。
+ * list 是 [{ u: 图片URL }]。返回 false 表示没生成（sharp 不可用 / 空列表）。
+ */
+async function buildSheet(sharp, list, outPath) {
+  const PAD = 8, GAP = 6;
+  const n = Math.min(list.length, 20);
+  if (!n) return false;
+  const CW = n === 1 ? 220 : (n <= 3 ? 190 : 150);
+  const CH = Math.round(CW * 4 / 3);
+  const COLS = Math.min(5, n);
+  const ROWS = Math.ceil(n / COLS);
+  const W = COLS * CW + (COLS - 1) * GAP + PAD * 2;
+  const H = ROWS * CH + (ROWS - 1) * GAP + PAD * 2;
+
+  const layer = [];
+  const badges = [];
+  for (let i = 0; i < n; i++) {
+    const c = i % COLS, r = Math.floor(i / COLS);
+    const x = PAD + c * (CW + GAP), y = PAD + r * (CH + GAP);
+    let tile = null;
+    const buf = await fetchImg(list[i].u);
+    if (buf) {
+      try {
+        tile = await sharp(buf).resize(CW, CH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 82 }).toBuffer();
+      } catch (e) { tile = null; }
+    }
+    if (!tile) {
+      tile = await sharp({ create: { width: CW, height: CH, channels: 3, background: '#ededed' } }).jpeg().toBuffer();
+    }
+    layer.push({ input: tile, left: x, top: y });
+    const cx = x + 19, cy = y + 19;
+    badges.push(
+      `<circle cx="${cx}" cy="${cy}" r="15" fill="#DF3363"/>` +
+      `<text x="${cx}" y="${cy + 6}" font-family="Arial, Helvetica, sans-serif" font-size="18" ` +
+      `font-weight="bold" fill="#ffffff" text-anchor="middle">${i + 1}</text>`
+    );
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${badges.join('')}</svg>`;
+  layer.push({ input: Buffer.from(svg), left: 0, top: 0 });
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  await sharp({ create: { width: W, height: H, channels: 3, background: '#ffffff' } })
+    .composite(layer)
+    .jpeg({ quality: 84 })
+    .toFile(outPath);
+  return true;
+}
+
+async function uploadImg(file, buf) {
+  if (!GH_TOKEN) { log('⚠️ 没给 GITHUB_TOKEN，本轮不发图'); return ''; }
+  try {
+    const r = await fetch(GH_API + IMG_DIR + '/' + file, {
+      method: 'PUT', headers: ghHeaders(),
+      body: JSON.stringify({ message: 'us notify img ' + file, content: buf.toString('base64'), branch: 'main' }),
+    });
+    if (r.status !== 201 && r.status !== 200) {
+      log(`⚠️ 上传集合图失败 ${file} HTTP ${r.status}`);
+      return '';
+    }
+    // jsDelivr 用 @main 会命中长缓存，用 @<sha> 能立刻拿到这个 commit 的文件
+    const j = await r.json();
+    return (j && j.commit && j.commit.sha) ? j.commit.sha.slice(0, 10) : '';
+  } catch (e) { log('⚠️ 上传集合图异常：' + e.message); return ''; }
+}
+
+// 上传后必须真的取到图才把 URL 写进消息，否则钉钉里就是一张破图
+async function resolveUrl(file, sha) {
+  const raw = `https://raw.githubusercontent.com/${REPO}/main/${IMG_DIR}/${file}`;
+  const cands = [];
+  cands.push('https://wsrv.nl/?url=' + encodeURIComponent(raw) + '&output=jpg&q=85&t=' + Date.now());
+  if (sha) cands.push(`https://cdn.jsdelivr.net/gh/${REPO}@${sha}/${IMG_DIR}/${file}`);
+  for (const u of cands) {
+    for (let i = 0; i < 6; i++) {
+      const r = await rawGet(u, 20000);
+      if (r.status === 200 && r.buf.length > 2000) return u;
+      await sleep(2000);
+    }
+  }
+  log(`⚠️ 集合图 ${file} 取不到，消息里就不放图了`);
+  return '';
+}
+
+async function publishSheet(sharp, list, fileName, tmpPath) {
+  if (!GH_TOKEN) return '';
+  if (!(await buildSheet(sharp, list, tmpPath))) return '';
+  const sha = await uploadImg(fileName, fs.readFileSync(tmpPath));
+  if (!sha) return '';
+  return resolveUrl(fileName, sha);
+}
+
+// main 上的图会一直堆，超过 36 小时的清掉
+async function pruneImgs() {
+  if (!GH_TOKEN) return;
+  try {
+    const r = await fetch(GH_API + IMG_DIR + '?ref=main', { headers: ghHeaders() });
+    if (r.status !== 200) return;
+    const list = await r.json();
+    if (!Array.isArray(list)) return;
+    const now = Date.now();
+    let n = 0;
+    for (const f of list) {
+      const m = /-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\.jpg$/.exec(f.name);
+      if (!m) continue;
+      const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+08:00`);
+      if (!t || now - t < IMG_KEEP_MS) continue;
+      await fetch(GH_API + IMG_DIR + '/' + f.name, {
+        method: 'DELETE', headers: ghHeaders(),
+        body: JSON.stringify({ message: 'prune ' + f.name, sha: f.sha, branch: 'main' }),
+      });
+      n++;
+    }
+    if (n) log(`   清理旧集合图 ${n} 张`);
+  } catch (e) { }
 }
 
 const usd2 = n => '$' + (Number(n) || 0).toFixed(2);
@@ -239,6 +409,23 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
 // ---------------------------------------------------------------- 主流程
 (async () => {
   const t0 = nowSec();
+
+  // US_DIGEST_DRY=1：不抓取，直接拿本地快照造一条汇总，把 markdown 和集合图打印出来（不发钉钉）
+  if (process.env.US_DIGEST_DRY === '1') {
+    let p = { items: [] };
+    try { p = JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch (e) { log('没有本地快照 ' + OUT); }
+    const fake = (p.items || []).slice(0, 14);
+    if (!fake.length) { log('本地快照为空，无法预览'); process.exit(0); }
+    const now = Math.floor(Date.now() / 1000);
+    const snap = { at_cn: new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 16).replace('T', ' '), items: fake, at: new Date().toISOString() };
+    const newL = fake.slice(0, 8).map(i => Object.assign({}, i, { first_seen: now, last_seen: now }));
+    const dropL = fake.slice(8, 11).map(i => Object.assign({}, i, { prev_price_usd: (i.price_usd || 0) + 3, last_seen: now }));
+    log(`[dry] 造数据：美区上新 ${newL.length} / 降价 ${dropL.length}`);
+    await pushDigest(snap, newL, dropL);
+    log('[dry] 结束（没发钉钉）');
+    process.exit(0);
+  }
+
   let prev = { items: [], runs: [] };
   try {
     if (fs.existsSync(OUT)) prev = JSON.parse(fs.readFileSync(OUT, 'utf8'));
@@ -365,34 +552,15 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     fs.writeFileSync(OUT, JSON.stringify(snap, null, 1));
     log(`快照写出：${items.length} 条（新增 ${fresh.length}，降价 ${dropped.length}）→ ${OUT}`);
 
-    // ── 钉钉：每小时汇总一次 ──
+    // ── 钉钉：每小时汇总一次（带集合图，跟卡市同一套）──
     const hourKey = new Date(t0 * 1000).toISOString().slice(0, 13); // UTC 小时桶
     const dg = snap.digest;
     if (dg.hour !== hourKey) {
       const newList = items.filter(i => i.first_seen >= t0 - 3600 && (i.first_seen === i.last_seen || i.first_seen > (dg.flushed_at || 0)));
       const dropList = dropped.filter(i => i.last_seen > (dg.flushed_at || 0));
-      if (newList.length || dropList.length) {
-        const lines = [];
-        lines.push(`🃏 美区煤炉 · 章昊小卡（${snap.at_cn}）`);
-        if (newList.length) {
-          lines.push(`\n🆕 上新 ${newList.length} 条`);
-          newList.slice(0, 12).forEach(i => {
-            lines.push(`· ${i.name.slice(0, 46)}`);
-            lines.push(`  ${usd2(i.price_usd)}${i.ship_usd != null ? ' + 运' + usd2(i.ship_usd) : ''} → 代切 ¥${i.daiqie}`);
-            lines.push(`  https://www.mercari.com/us/item/${i.id}/`);
-          });
-          if (newList.length > 12) lines.push(`…还有 ${newList.length - 12} 条`);
-        }
-        if (dropList.length) {
-          lines.push(`\n📉 降价 ${dropList.length} 条`);
-          dropList.slice(0, 8).forEach(i => {
-            lines.push(`· ${i.name.slice(0, 40)}  ${usd2(i.prev_price_usd)} → ${usd2(i.price_usd)}`);
-            lines.push(`  https://www.mercari.com/us/item/${i.id}/`);
-          });
-        }
-        await dingText(lines.join('\n'));
-        dg.flushed_at = t0;
-      }
+      // 无条件进汇总：美区这一小时没动静时日区可能上了新卡，由 pushDigest 自己判断有没有内容
+      const sent = await pushDigest(snap, newList, dropList);
+      if (sent) dg.flushed_at = t0;
       dg.hour = hourKey;
       snap.digest = dg;
       fs.writeFileSync(OUT, JSON.stringify(snap, null, 1));
@@ -404,3 +572,153 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
   }
   log('完成，用时', ((nowSec() - t0) / 60).toFixed(1), '分钟');
 })();
+
+/* ---------------------------------------------------------------- 钉钉汇总（带图） */
+
+// ⚠️ 商品名里常带 [ ] ，直接塞进 [名字](链接) 会把 markdown 解析搞坏 → 换全角
+const mdName = s => String(s || '').replace(/\[/g, '［').replace(/\]/g, '］').replace(/[\r\n]+/g, ' ').trim();
+
+// 一条卡占一行（钉钉 markdown 里 \n 不换行，段落要空行，所以拆成两行反而翻倍占高）
+function cardLines(it, idx) {
+  const name = mdName(it.name).slice(0, 30) || '（无标题）';
+  const ship = it.ship_usd != null ? `+运${usd2(it.ship_usd)}` : '';
+  // 降价条目显示「原价→现价」
+  const price = (it.prev_price_usd && it.prev_price_usd > (it.price_usd || 0) + 0.009)
+    ? `${usd2(it.prev_price_usd)}→${usd2(it.price_usd)}`
+    : usd2(it.price_usd);
+  return [
+    `**${idx}**　[${name}](https://www.mercari.com/us/item/${it.id}/)　${price}${ship} → ¥${it.daiqie}`,
+  ];
+}
+
+// 日区：价格就按页面一致的日元显示（页面本身不折人民币，别在播报里自造汇率）
+function jpCardLines(it, idx) {
+  const name = mdName(it.name_cn || it.name).slice(0, 30) || '（无标题）';
+  const jpy = Number(it.price_jpy) || 0;
+  return [
+    `**${idx}**　[${name}](https://jp.mercari.com/item/${it.id})　¥${jpy.toLocaleString('en-US')}`,
+  ];
+}
+
+/**
+ * 读同仓库 main 上的日区快照 mw.json，取最近 winSec 秒内新上架的卡。
+ * 注意：日区快照没有历史价格字段，判不了降价，只能判上新（created_ts 是上架时间）。
+ */
+async function fetchJpFresh(winSec) {
+  const urls = [
+    `https://raw.githubusercontent.com/${REPO}/main/mw.json`,
+    `https://cdn.jsdelivr.net/gh/${REPO}@main/mw.json`,
+  ];
+  for (const u of urls) {
+    const r = await rawGet(u, 25000);
+    if (r.status !== 200 || r.buf.length < 5000) { log(`日区快照拉取失败 ${r.status} ${u.slice(0, 48)}`); continue; }
+    try {
+      const d = JSON.parse(r.buf.toString('utf8'));
+      const now = Math.floor(Date.now() / 1000);
+      const list = (d.items || [])
+        .filter(it => it && !it.sold && (Number(it.created_ts) || 0) >= now - winSec)
+        .sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
+      log(`日区快照 ${(d.items || []).length} 张，近 ${Math.round(winSec / 60)} 分钟上新 ${list.length} 张`);
+      return list;
+    } catch (e) { log('日区快照解析失败：' + e.message); }
+  }
+  log('⚠️ 拉不到日区快照，本次汇总只播美区');
+  return [];
+}
+
+// 按行数 + 字节双约束装箱，切成多条消息（序号跨段不重来，跟图上的红圈一致）
+function packCards(list, label, imgUrl, trunc, lineFn) {
+  const chunks = [];
+  let cur = [], lines = 0, bytes = 0;
+  list.forEach((it, i) => {
+    const block = lineFn(it, i + 1);
+    const b = Buffer.byteLength(block.join('\n'));
+    const over = cur.length && (lines + 1 + block.length > LINE_CAP || bytes + b > BYTE_CAP);
+    if (over) { chunks.push(cur); cur = []; lines = 0; bytes = 0; }
+    if (cur.length) { lines += 1; bytes += 2; }
+    cur.push({ it, idx: i + 1 });
+    lines += block.length;
+    bytes += b;
+  });
+  if (cur.length) chunks.push(cur);
+  return chunks.map((c, i) => ({
+    label, img: i === 0 ? imgUrl : '', items: c, part: i + 1, of: chunks.length,
+    lines: lineFn,
+    trunc: i === chunks.length - 1 ? (trunc || 0) : 0,
+  }));
+}
+
+function buildMd(p, snap) {
+  const L = [`### 🃏 章昊小卡 · 小时汇总（${snap.at_cn}）`, ''];
+  L.push(`[🇯🇵 日区看板](${JP_SITE})　｜　[🇺🇸 美区看板](${SITE})`, '');
+  L.push(`**${p.label}**${p.of > 1 ? `（第 ${p.part}/${p.of} 段）` : ''}`, '');
+  if (p.img) L.push(`![${p.label}](${p.img})`, '');
+  p.items.forEach(({ it, idx }, k) => {
+    if (k) L.push('');
+    L.push(...p.lines(it, idx));
+  });
+  if (p.trunc > 0) L.push('', `> 另有 ${p.trunc} 条没列出，点上面看板看全部`);
+  L.push('', `> 美区代切价 =（卡价 + 运费）× 7.2 + 7；日区按日元原价`);
+  return L.join('\n');
+}
+
+async function pushDigest(snap, newList, dropList) {
+  let sharp = null;
+  try { sharp = require('sharp'); } catch (e) { log('⚠️ 环境里没装 sharp，本轮只发文字'); }
+
+  // 日区：同一小时窗内的上新（日区快照没有历史价，判不了降价）
+  const jpFresh = await fetchJpFresh(3600);
+
+  const nShow = newList.slice(0, SHEET_MAX);
+  const dShow = dropList.slice(0, SHEET_MAX);
+  const jShow = jpFresh.slice(0, SHEET_MAX);
+
+  // 文件名形如 us-new-1120-1503.jpg，pruneImgs 靠这个后缀认时间
+  const p2 = n => String(n).padStart(2, '0');
+  const cnDate = new Date(Date.now() + 8 * 3600e3);
+  const stamp = `${p2(cnDate.getUTCMonth() + 1)}${p2(cnDate.getUTCDate())}-${p2(cnDate.getUTCHours())}${p2(cnDate.getUTCMinutes())}`;
+  const tmpDir = path.join(os.tmpdir(), 'us-notify');
+
+  const sheet = async (list, name) => {
+    if (!sharp || !list.length) return '';
+    const out = path.join(tmpDir, name);
+    try {
+      const made = await buildSheet(sharp, list.map(i => ({ u: i.thumb_url || i.img_url })), out);
+      if (!made) return '';
+      // 本地预览用：只生成图不上传，方便看拼图效果
+      if (process.env.US_SHEET_DRY === '1') { log('集合图已生成（本地预览，不上传）: ' + out); return ''; }
+      const sha = await uploadImg(name, fs.readFileSync(out));
+      return sha ? await resolveUrl(name, sha) : '';
+    } catch (e) { log('⚠️ 集合图生成失败：' + e.message); return ''; }
+  };
+
+  const jpImg = await sheet(jShow, `jp-new-${stamp}.jpg`);
+  const newImg = await sheet(nShow, `us-new-${stamp}.jpg`);
+  const dropImg = await sheet(dShow, `us-drop-${stamp}.jpg`);
+
+  // 顺序：日区在前（主力），美区上新、美区降价在后
+  const parts = [];
+  if (jShow.length) parts.push(...packCards(jShow, `🇯🇵 日区上新 ${jpFresh.length} 张`, jpImg, jpFresh.length - jShow.length, jpCardLines));
+  if (nShow.length) parts.push(...packCards(nShow, `🇺🇸 美区上新 ${newList.length} 条`, newImg, newList.length - nShow.length, cardLines));
+  if (dShow.length) parts.push(...packCards(dShow, `📉 美区降价 ${dropList.length} 条`, dropImg, 0, cardLines));
+  if (!parts.length) { log('本小时日区/美区都没有上新或降价，不发汇总'); return false; }
+
+  const mds = parts.map(p => buildMd(p, snap));
+  log('──────── 消息预览 ────────');
+  mds.forEach((m, i) => { log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
+  log('──────────────────────────');
+
+  const title = `🃏 章昊小卡 日区${jpFresh.length}/美区${newList.length}${dropList.length ? '降' + dropList.length : ''} · ${snap.at_cn}`;
+  let ok = 0;
+  for (let i = 0; i < mds.length; i++) {
+    const t = mds.length > 1 ? `${title}（${i + 1}/${mds.length}）` : title;
+    let sent = false;
+    for (let a = 0; a < 3 && !sent; a++) {          // 钉钉偶发 errcode -1，隔几秒重发通常就过
+      sent = await dingMd(t, mds[i]);
+      if (!sent) await sleep(3000);
+    }
+    if (sent) ok++;
+  }
+  try { await pruneImgs(); } catch (e) { }
+  return ok > 0;
+}
