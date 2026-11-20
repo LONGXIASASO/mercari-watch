@@ -249,8 +249,17 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
   let all = [];
   try {
     const kws = KW_ONLY ? [KW_ONLY] : KEYWORDS;
+    // 预热：先进首页把 Cloudflare 过掉，否则第一个关键词经常抓到 0 条
+    const warm = await ensurePassed(env, 'https://www.mercari.com/');
+    log('预热', warm.ok ? `${warm.sec}s 通过` : `失败(${warm.title})`);
+    await sleep(2500);
     for (const kw of kws) {
-      const r = await searchOne(env, kw);
+      let r = await searchOne(env, kw);
+      if (!r.items.length) {            // 偶发空手：同会话再进一次基本就出数据
+        log(`   ${kw} 空手，重试一次`);
+        await sleep(1500);
+        r = await searchOne(env, kw);
+      }
       r.items.forEach(it => { it.__kw = kw; all.push(it); });
       await sleep(1200);
     }
