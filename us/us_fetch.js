@@ -332,6 +332,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     const seen = new Set(items.map(i => i.id));
     for (const p of (prev.items || [])) {
       if (seen.has(p.id)) continue;
+      if (p.price_usd == null) continue;           // 旧版本字段结构，直接丢
       if (t0 - (p.last_seen || 0) > HOURS * 3600) continue;
       items.push(Object.assign({}, p, { sold: true }));
     }
