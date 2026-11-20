@@ -1,0 +1,21 @@
+name: 订阅流量查询（临时）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  subinfo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 查询
+        env:
+          SUB: ${{ secrets.POCA_SUB_URL }}
+        run: node poca/_subinfo.js
