@@ -269,6 +269,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
 
     // 过滤
     const before = all.length;
+    const rawTotal = all.length;
     let droppedTitle = 0;
     all = all.filter(it => {
       const nm = it.name || '';
@@ -289,7 +290,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     const extra = await enrich(env, need.slice(0, 300));
     env.close();
 
-    // 组装快照
+    // 组装快照（字段名必须与页面一致：price_usd / ship_usd / created_ts / updated_ts）
     const items = [];
     const fresh = [];
     const dropped = [];
@@ -297,45 +298,53 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
       const p = prevMap.get(it.id);
       const e = extra[it.id] || {};
       const price = (Number(it.price) || 0) / 100;
-      const ship = e.ship != null ? e.ship : (p ? p.ship : null);
+      const ship = e.ship != null ? e.ship : (p ? p.ship_usd : null);
+      const created = it.created || (p && p.created_ts) || 0;
+      const photo = (it.photos && it.photos[0]) || {};
       const rec = {
         id: it.id,
         name: it.name || '',
-        price,
-        orig_price: (Number(it.originalPrice) || 0) / 100 || price,
-        ship,
+        name_cn: (p && p.name_cn) || '',
+        price_usd: price,
+        orig_price_usd: (Number(it.originalPrice) || 0) / 100 || price,
+        ship_usd: ship,
         daiqie: Number(daiqie(price, ship == null ? 0 : ship).toFixed(1)),
+        created_ts: created,
+        updated_ts: created,
+        list_ts: created,
+        thumb_url: photo.thumbnail || (p && p.thumb_url) || '',
+        img_url: photo.imageUrl || (p && p.img_url) || '',
+        sold: (it.status || 'on_sale') !== 'on_sale',
+        cond_id: null,
+        query_label: it.__kw || (p && p.query_label) || '',
         seller: e.seller || (p && p.seller) || '',
         seller_id: (it.seller && (it.seller.id || it.seller.sellerId)) || (p && p.seller_id) || null,
-        status: it.status || 'on_sale',
-        created: it.created || (p && p.created) || 0,
-        img: (it.photos && it.photos[0] && it.photos[0].imageUrl) || (p && p.img) || '',
-        kw: it.__kw || (p && p.kw) || '',
         first_seen: p ? p.first_seen : t0,
         last_seen: t0,
-        prev_price: p ? p.price : null,
+        prev_price_usd: p ? p.price_usd : null,
       };
       if (!p) fresh.push(rec);
-      else if (p.price && price < p.price - 0.009) dropped.push(rec);
+      else if (p.price_usd && price < p.price_usd - 0.009) dropped.push(rec);
       items.push(rec);
     }
 
-    // 保留旧快照里本轮没出现、但还在 72 小时内的（已售/下架留痕）
+    // 保留旧快照里本轮没出现、但还在窗口内的（下架/已售留痕）
     const seen = new Set(items.map(i => i.id));
     for (const p of (prev.items || [])) {
       if (seen.has(p.id)) continue;
       if (t0 - (p.last_seen || 0) > HOURS * 3600) continue;
-      items.push(Object.assign({}, p, { status: 'gone' }));
+      items.push(Object.assign({}, p, { sold: true }));
     }
 
-    items.sort((a, b) => (b.created || 0) - (a.created || 0));
+    items.sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
 
+    const cnNow = new Date(t0 * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
     const runs = (prev.runs || []).slice(0, 40);
-    runs.unshift({ at: new Date().toISOString(), at_cn: new Date(t0 * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }).slice(5, 16), fetched: all.length, fresh: fresh.length, dropped: dropped.length, hours: HOURS });
+    runs.unshift({ ran_at: new Date(t0 * 1000).toISOString(), win_hours: HOURS, fetched: rawTotal, matched: all.length, fresh: fresh.length, dropped: dropped.length });
 
     const snap = {
-      at: new Date().toISOString(),
-      at_cn: new Date(t0 * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }).slice(5, 16),
+      at: new Date(t0 * 1000).toISOString(),
+      at_cn: cnNow.slice(5, 16),
       window_hours: HOURS,
       rate: 7.2,
       fee: 7,
@@ -359,7 +368,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
           lines.push(`\n🆕 上新 ${newList.length} 条`);
           newList.slice(0, 12).forEach(i => {
             lines.push(`· ${i.name.slice(0, 46)}`);
-            lines.push(`  ${usd2(i.price)}${i.ship != null ? ' + 运' + usd2(i.ship) : ''} → 代切 ¥${i.daiqie}`);
+            lines.push(`  ${usd2(i.price_usd)}${i.ship_usd != null ? ' + 运' + usd2(i.ship_usd) : ''} → 代切 ¥${i.daiqie}`);
             lines.push(`  https://www.mercari.com/us/item/${i.id}/`);
           });
           if (newList.length > 12) lines.push(`…还有 ${newList.length - 12} 条`);
@@ -367,7 +376,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
         if (dropList.length) {
           lines.push(`\n📉 降价 ${dropList.length} 条`);
           dropList.slice(0, 8).forEach(i => {
-            lines.push(`· ${i.name.slice(0, 40)}  ${usd2(i.prev_price)} → ${usd2(i.price)}`);
+            lines.push(`· ${i.name.slice(0, 40)}  ${usd2(i.prev_price_usd)} → ${usd2(i.price_usd)}`);
             lines.push(`  https://www.mercari.com/us/item/${i.id}/`);
           });
         }
