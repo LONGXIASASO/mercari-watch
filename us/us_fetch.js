@@ -301,9 +301,19 @@ async function fetchImg(u) {
 }
 
 /**
- * 把一批商品拼成一张网格图，左上角带序号徽章（序号与消息里的编号对应）。
- * list 是 [{ u: 图片URL }]。返回 false 表示没生成（sharp 不可用 / 空列表）。
+ * 把一批商品拼成一张网格图：左上角序号徽章（与消息里的编号对应）+ 底部价格条。
+ * list 是 [{ u: 图片URL, p: '主价格', s: '副价格（可空）' }]。
+ * 返回 false 表示没生成（sharp 不可用 / 空列表）。
  */
+const SHEET_FONT = 'DejaVu Sans, Liberation Sans, Arial, Helvetica, sans-serif';
+const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 粗估字宽，放不下就缩字号（我们这些价格串基本是 ASCII，0.6 系数够用）
+function fitFont(txt, size, maxW) {
+  let s = size;
+  while (s > 10 && String(txt).length * s * 0.62 > maxW) s -= 1;
+  return s;
+}
+
 async function buildSheet(sharp, list, outPath) {
   const PAD = 8, GAP = 6;
   const n = Math.min(list.length, 20);
@@ -314,9 +324,11 @@ async function buildSheet(sharp, list, outPath) {
   const ROWS = Math.ceil(n / COLS);
   const W = COLS * CW + (COLS - 1) * GAP + PAD * 2;
   const H = ROWS * CH + (ROWS - 1) * GAP + PAD * 2;
+  // 同一张图里所有格子的价格条高度一致，看起来才齐
+  const barH = list.slice(0, n).some(x => x && x.s) ? 42 : 27;
 
   const layer = [];
-  const badges = [];
+  const overlays = [];
   for (let i = 0; i < n; i++) {
     const c = i % COLS, r = Math.floor(i / COLS);
     const x = PAD + c * (CW + GAP), y = PAD + r * (CH + GAP);
@@ -331,14 +343,35 @@ async function buildSheet(sharp, list, outPath) {
       tile = await sharp({ create: { width: CW, height: CH, channels: 3, background: '#ededed' } }).jpeg().toBuffer();
     }
     layer.push({ input: tile, left: x, top: y });
+
+    // 序号徽章
     const cx = x + 19, cy = y + 19;
-    badges.push(
+    overlays.push(
       `<circle cx="${cx}" cy="${cy}" r="15" fill="#DF3363"/>` +
-      `<text x="${cx}" y="${cy + 6}" font-family="Arial, Helvetica, sans-serif" font-size="18" ` +
+      `<text x="${cx}" y="${cy + 6}" font-family="${SHEET_FONT}" font-size="18" ` +
       `font-weight="bold" fill="#ffffff" text-anchor="middle">${i + 1}</text>`
     );
+
+    // 底部价格条：白底深字，压在图上保证任何底图都看得清
+    const price = String((list[i] && list[i].p) || '');
+    const sub = String((list[i] && list[i].s) || '');
+    if (price) {
+      overlays.push(`<rect x="${x}" y="${y + CH - barH}" width="${CW}" height="${barH}" fill="#ffffff" opacity="0.95"/>`);
+      const y1 = sub ? y + CH - barH + 18 : y + CH - 9;
+      overlays.push(
+        `<text x="${x + CW / 2}" y="${y1}" font-family="${SHEET_FONT}" ` +
+        `font-size="${fitFont(price, 17, CW - 10)}" font-weight="bold" fill="#23262d" ` +
+        `text-anchor="middle">${xmlEsc(price)}</text>`
+      );
+      if (sub) {
+        overlays.push(
+          `<text x="${x + CW / 2}" y="${y + CH - 8}" font-family="${SHEET_FONT}" ` +
+          `font-size="${fitFont(sub, 13, CW - 10)}" fill="#df3363" text-anchor="middle">${xmlEsc(sub)}</text>`
+        );
+      }
+    }
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${badges.join('')}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${overlays.join('')}</svg>`;
   layer.push({ input: Buffer.from(svg), left: 0, top: 0 });
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -444,6 +477,31 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     if (fs.existsSync(OUT)) prev = JSON.parse(fs.readFileSync(OUT, 'utf8'));
   } catch (e) { log('旧快照读取失败，按空处理'); }
   const prevMap = new Map((prev.items || []).map(it => [it.id, it]));
+
+  // US_DIGEST_REPLAY=1：不抓取，直接按时间窗从线上快照重算一遍汇总并真的发钉钉（重播用）
+  //   US_DIGEST_WIN=<分钟> 指定窗口，默认 60；配合 US_DIGEST_DRY=1 则只打印不发送
+  if (process.env.US_DIGEST_REPLAY === '1') {
+    const winMin = Number(process.env.US_DIGEST_WIN || 60);
+    const win = winMin * 60;
+    const now = nowSec();
+    const items = prev.items || [];
+    const newList = items
+      .filter(i => !i.sold && (Number(i.first_seen) || 0) >= now - win)
+      .sort((a, b) => (b.first_seen || 0) - (a.first_seen || 0));
+    const dropList = items
+      .filter(i => !i.sold && i.prev_price_usd
+        && i.prev_price_usd > (i.price_usd || 0) + 0.009
+        && (Number(i.last_seen) || 0) >= now - win)
+      .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
+    const snap = {
+      at_cn: new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 16).replace('T', ' ') + ' 重播',
+      items, at: new Date().toISOString(), digest: prev.digest || {},
+    };
+    log(`[replay] 窗口 ${winMin} 分钟：美区上新 ${newList.length} / 降价 ${dropList.length}`);
+    const sent = await pushDigest(snap, newList, dropList);
+    log('[replay] ' + (sent ? '已发出' : '没发（无内容或钉钉失败）'));
+    process.exit(0);
+  }
 
   const env = await launch();
   let all = [];
@@ -737,11 +795,22 @@ async function pushDigest(snap, newList, dropList) {
   const stamp = `${p2(cnDate.getUTCMonth() + 1)}${p2(cnDate.getUTCDate())}-${p2(cnDate.getUTCHours())}${p2(cnDate.getUTCMinutes())}`;
   const tmpDir = path.join(os.tmpdir(), 'us-notify');
 
-  const sheet = async (list, name) => {
+  // 图上每格写什么价格：主行大字＝当前价，副行小字＝代切价/原价（她 20 日要的）
+  const usLabel = it => ({ p: usd2(it.price_usd), s: it.daiqie ? `≈¥${it.daiqie}` : '' });
+  const usDropLabel = it => ({
+    p: usd2(it.price_usd),
+    s: it.prev_price_usd ? `原 ${usd2(it.prev_price_usd)}` : '',
+  });
+  const jpLabel = it => {
+    const jpy = Number(it.price_jpy) || 0;
+    return { p: `JP¥${jpy.toLocaleString('en-US')}`, s: JP_RATE > 0 ? `≈¥${(jpy * JP_RATE).toFixed(1)}` : '' };
+  };
+
+  const sheet = async (list, name, labeler) => {
     if (!sharp || !list.length) return '';
     const out = path.join(tmpDir, name);
     try {
-      const made = await buildSheet(sharp, list.map(i => ({ u: i.thumb_url || i.img_url })), out);
+      const made = await buildSheet(sharp, list.map(i => Object.assign({ u: i.thumb_url || i.img_url }, labeler(i))), out);
       if (!made) return '';
       // 本地预览用：只生成图不上传，方便看拼图效果
       if (process.env.US_SHEET_DRY === '1') { log('集合图已生成（本地预览，不上传）: ' + out); return ''; }
@@ -750,9 +819,9 @@ async function pushDigest(snap, newList, dropList) {
     } catch (e) { log('⚠️ 集合图生成失败：' + e.message); return ''; }
   };
 
-  const jpImg = await sheet(jShow, `jp-new-${stamp}.jpg`);
-  const newImg = await sheet(nShow, `us-new-${stamp}.jpg`);
-  const dropImg = await sheet(dShow, `us-drop-${stamp}.jpg`);
+  const jpImg = await sheet(jShow, `jp-new-${stamp}.jpg`, jpLabel);
+  const newImg = await sheet(nShow, `us-new-${stamp}.jpg`, usLabel);
+  const dropImg = await sheet(dShow, `us-drop-${stamp}.jpg`, usDropLabel);
 
   // 顺序：日区在前（主力），美区上新、美区降价在后
   const parts = [];
