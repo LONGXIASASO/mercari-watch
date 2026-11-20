@@ -48,6 +48,8 @@ const KEYWORDS = [
   'hao zhang',
   '장하오',
   '章昊',
+  'zb1 hao',        // 11-20 新增：粉丝习惯「团名 + 名字」
+  'and2ble hao',    // 11-20 新增：同上（他新团）
 ];
 
 // 明显不是小卡的词（跟日区一样做一层兜底，避免整本专辑/海报刷屏）
@@ -55,8 +57,19 @@ const MUST_NOT = [/\balbum\b/i, /\bposter\b/i, /\bsealed\b/i];
 
 // 标题必须带章昊相关词（美区很多卖家一条一条刷「别人的卡」，
 // 搜索会把关键词匹配到描述里的也算进来，不卡标题会被刷屏）
-const TITLE_MUST = process.env.US_TITLE_MUST === '0' ? null
-  : /zhang\s*hao|zhanghao|jang\s*hao|haohao|hao\s*zhang|章昊|장하오/i;
+const TITLE_STRICT = /zhang\s*hao|zhanghao|jang\s*hao|haohao|hao\s*zhang|章昊|장하오/i;
+
+// 「zb1 hao」「and2ble hao」这两个词本身已经把成员框住了（搜索词里没有别人），
+// 标题只要出现独立的 hao 就算命中，否则会把「ZB1 HAO photocard」这种全过滤掉。
+const KW_LOOSE = new Set(['zb1 hao', 'and2ble hao']);
+const TITLE_LOOSE = /(^|[^a-z])hao([^a-z]|$)/i;
+const TITLE_OFF = process.env.US_TITLE_MUST === '0';
+
+function titleOk(nm, kw) {
+  if (TITLE_OFF) return true;
+  if (TITLE_STRICT.test(nm)) return true;
+  return KW_LOOSE.has(String(kw || '').toLowerCase()) && TITLE_LOOSE.test(nm);
+}
 
 const MAX_PER_KW = Number(process.env.US_MAX_PER_KW || 260);
 
@@ -470,7 +483,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     all = all.filter(it => {
       const nm = it.name || '';
       if (MUST_NOT.some(re => re.test(nm))) return false;
-      if (TITLE_MUST && !TITLE_MUST.test(nm)) { droppedTitle++; return false; }
+      if (!titleOk(nm, it.__kw)) { droppedTitle++; return false; }
       if (it.status && !/^(on_sale|trading)$/.test(it.status)) return false;
       return true;
     });
