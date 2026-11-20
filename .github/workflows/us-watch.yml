@@ -6,6 +6,11 @@ name: 美区煤炉监控
 
 on:
   workflow_dispatch:
+    inputs:
+      digest_replay:
+        description: '只重播汇总：填窗口分钟数（如 60），留空=正常抓取'
+        required: false
+        default: ''
   schedule:
     - cron: '*/10 * * * *'
 
@@ -30,6 +35,7 @@ jobs:
           node-version: '22'
 
       - name: 起 Xray（订阅里的美国节点）
+        if: ${{ github.event.inputs.digest_replay == '' }}
         env:
           POCA_SUB_URL: ${{ secrets.POCA_SUB_URL }}
         run: |
@@ -44,6 +50,7 @@ jobs:
           sleep 6
 
       - name: 选美国出口
+        if: ${{ github.event.inputs.digest_replay == '' }}
         run: |
           N=$(python3 -c "import json;print(len(json.load(open('/tmp/xray.json'))['inbounds']))")
           PICK=""
@@ -58,6 +65,7 @@ jobs:
           echo "US_PROXY=http://127.0.0.1:$PICK" >> $GITHUB_ENV
 
       - name: 装 Chrome
+        if: ${{ github.event.inputs.digest_replay == '' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb >/dev/null
@@ -75,7 +83,13 @@ jobs:
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           US_OUT: mus.json
+          US_DIGEST_WIN: ${{ github.event.inputs.digest_replay }}
         run: |
+          # 填了 digest_replay 就只按窗口重播一遍汇总（不抓取、不动 mus.json）
+          if [ -n "$US_DIGEST_WIN" ]; then
+            export US_DIGEST_REPLAY=1
+            echo "重播模式：窗口 ${US_DIGEST_WIN} 分钟"
+          fi
           xvfb-run -a --server-args="-screen 0 1366x900x24" node us/us_fetch.js
 
       - name: 提交结果
