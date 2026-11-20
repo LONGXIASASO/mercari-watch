@@ -728,8 +728,8 @@ function jpCardLines(it, idx) {
  * 读同仓库 main 上的日区快照 mw.json，返回 { fresh: 上新, drops: 改价 }。
  * - sinceSec＝上次**成功播报**的时刻（快照 digest.flushed_at），作为下界：
  *   同一张卡绝不会在两轮播报里各出现一次（她 11-20 反馈「播报重复」就是没这个下界）。
- * - 日区抓取器从 11-20 起会写 prev_price_jpy（＝上一轮价格，价格没变就删掉），
- *   靠它判「刚改过价」；改完价下一轮 prev 自动消失，所以改价天然只播一次。
+ * - 「更新」不看价格，看煤炉的 updated 时间：卖家改价/改描述/换图都会刷新它，
+ *   所以只要 updated 落在窗口内且不是本轮新上架的，就算一条「变化」播出去。
  */
 async function fetchJpFresh(winSec, sinceSec) {
   const urls = [
@@ -749,14 +749,16 @@ async function fetchJpFresh(winSec, sinceSec) {
       .filter(it => (Number(it.created_ts) || 0) > since
         && (!it.last_seen || Date.parse(it.last_seen) / 1000 >= now - 45 * 60))
       .sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
-    const drops = all
+    const changes = all
+      // 「有变化」＝老条目（上架时间早于上次播报）但 updated 时间落在窗口内。
+      // 不只看价格：卖家改描述、换图、改价，煤炉都会刷新 updated（她 11-20：不想只看上新）。
       .filter(it => {
-        const op = Number(it.prev_price_jpy) || 0, np = Number(it.price_jpy) || 0;
-        return op > 0 && np > 0 && op !== np && (Number(it.updated_ts) || 0) > since;
+        const c = Number(it.created_ts) || 0, u = Number(it.updated_ts) || 0;
+        return u > since && c <= since;
       })
       .sort((a, b) => (b.updated_ts || 0) - (a.updated_ts || 0));
-    log(`${tag} ${(d.items || []).length} 张，近 ${Math.round((now - since) / 60)} 分钟：上新 ${fresh.length} 张 / 改价 ${drops.length} 张`);
-    return { fresh, drops };
+    log(`${tag} ${(d.items || []).length} 张，近 ${Math.round((now - since) / 60)} 分钟：上新 ${fresh.length} 张 / 更新 ${changes.length} 张`);
+    return { fresh, changes };
   };
 
   // 本地调试用：US_JP_FILE=<本地 mw.json 路径>，可以拿假数据验证改价播报的排版
@@ -772,7 +774,7 @@ async function fetchJpFresh(winSec, sinceSec) {
     catch (e) { log('日区快照解析失败：' + e.message); }
   }
   log('⚠️ 拉不到日区快照，本次汇总只播美区');
-  return { fresh: [], drops: [] };
+  return { fresh: [], changes: [] };
 }
 
 // 日元 → 人民币实时汇率（1 JPY = ? CNY）。多个免费源依次试，全挂了就不显示换算，绝不写死假汇率。
@@ -842,8 +844,8 @@ async function pushDigest(snap, newList, dropList, sinceSec, winSec) {
 
   // 日区：上次播报之后的上新 + 改价（sinceSec 卡下界，同一张卡不会重播）
   const jp = await fetchJpFresh(winSec || 3600, sinceSec);
-  const jpFresh = jp.fresh, jpDrops = jp.drops;
-  JP_RATE = (jpFresh.length || jpDrops.length) ? await fetchJpyCny() : 0;
+  const jpFresh = jp.fresh, jpChanges = jp.changes;
+  JP_RATE = (jpFresh.length || jpChanges.length) ? await fetchJpyCny() : 0;
 
   const nShow = newList.slice(0, SHEET_MAX);
   const dShow = dropList.slice(0, SHEET_MAX);
@@ -884,7 +886,7 @@ async function pushDigest(snap, newList, dropList, sinceSec, winSec) {
 
   /* 日区上新 + 改价合并成一条消息、一张图（日区一天也就几张，拆两条太碎）；
      条目上只写现价，靠段标题的「上新 N / 改价 M」区分。 */
-  const jpAll = jpFresh.concat(jpDrops);
+  const jpAll = jpFresh.concat(jpChanges);
   const jpShow = jpAll.slice(0, SHEET_MAX);
   const jpImg = await sheet(jpShow, `jp-new-${stamp}.jpg`, jpLabel);
   const newImg = await sheet(nShow, `us-new-${stamp}.jpg`, usLabel);
@@ -893,8 +895,10 @@ async function pushDigest(snap, newList, dropList, sinceSec, winSec) {
   // 顺序：日区在前（主力），然后美区上新、美区改价
   const parts = [];
   if (jpShow.length) {
-    const jpLabelText = `🇯🇵 日区 上新 ${jpFresh.length} 张${jpDrops.length ? ` / 改价 ${jpDrops.length} 张` : ''}`;
-    parts.push(...packCards(jpShow, jpLabelText, jpImg, jpAll.length - jpShow.length, jpCardLines));
+    const bits = [];
+    if (jpFresh.length) bits.push(`上新 ${jpFresh.length} 张`);
+    if (jpChanges.length) bits.push(`更新 ${jpChanges.length} 张`);
+    parts.push(...packCards(jpShow, `🇯🇵 日区 ${bits.join(' / ')}`, jpImg, jpAll.length - jpShow.length, jpCardLines));
   }
   if (nShow.length) parts.push(...packCards(nShow, `🇺🇸 美区上新 ${newList.length} 条`, newImg, newList.length - nShow.length, cardLines));
   if (dShow.length) {
@@ -910,7 +914,7 @@ async function pushDigest(snap, newList, dropList, sinceSec, winSec) {
   mds.forEach((m, i) => { log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
   log('──────────────────────────');
 
-  const title = `🃏 章昊小卡 日区${jpFresh.length}新${jpDrops.length ? '/' + jpDrops.length + '改价' : ''} 美区${newList.length}新${dropList.length ? '/' + dropList.length + '改价' : ''} · ${snap.at_cn}`;
+  const title = `🃏 章昊小卡 日区${jpFresh.length}新${jpChanges.length ? '/' + jpChanges.length + '更新' : ''} 美区${newList.length}新${dropList.length ? '/' + dropList.length + '改价' : ''} · ${snap.at_cn}`;
   let ok = 0;
   for (let i = 0; i < mds.length; i++) {
     const t = mds.length > 1 ? `${title}（${i + 1}/${mds.length}）` : title;
