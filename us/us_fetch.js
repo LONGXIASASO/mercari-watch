@@ -485,7 +485,11 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     const now = Math.floor(Date.now() / 1000);
     const snap = { at_cn: new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 16).replace('T', ' '), items: fake, at: new Date().toISOString() };
     const newL = fake.slice(0, 8).map(i => Object.assign({}, i, { first_seen: now, last_seen: now }));
-    const dropL = fake.slice(8, 11).map(i => Object.assign({}, i, { prev_price_usd: (i.price_usd || 0) + 3, last_seen: now }));
+    const dropL = fake.slice(8, 11).map((i, k) => Object.assign({}, i, {
+      // 前两条造降价、第三条造涨价，验证「改价」两种方向都能播
+      prev_price_usd: k === 2 ? Math.max(0.5, (i.price_usd || 1) - 2) : (i.price_usd || 0) + 3,
+      last_seen: now,
+    }));
     log(`[dry] 造数据：美区上新 ${newL.length} / 降价 ${dropL.length}`);
     await pushDigest(snap, newL, dropL);
     log('[dry] 结束（没发钉钉）');
@@ -510,7 +514,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
       .sort((a, b) => (b.first_seen || 0) - (a.first_seen || 0));
     const dropList = items
       .filter(i => !i.sold && i.prev_price_usd
-        && i.prev_price_usd > (i.price_usd || 0) + 0.009
+        && Math.abs(i.prev_price_usd - (i.price_usd || 0)) >= 0.01
         && (Number(i.last_seen) || 0) >= now - win)
       .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
     const snap = {
@@ -601,7 +605,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
     // 组装快照（字段名必须与页面一致：price_usd / ship_usd / created_ts / updated_ts）
     const items = [];
     const fresh = [];
-    const dropped = [];
+    const changed = [];
     for (const it of all) {
       const p = prevMap.get(it.id);
       const e = extra[it.id] || {};
@@ -632,7 +636,8 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
         prev_price_usd: p ? p.price_usd : null,
       };
       if (!p) fresh.push(rec);
-      else if (p.price_usd && price < p.price_usd - 0.009) dropped.push(rec);
+      // ⚠️ 不只降价：涨价、改价都算「有变化」，一起进播报（她 11-20：别只播上新）
+      else if (p.price_usd && Math.abs(price - p.price_usd) >= 0.01) changed.push(rec);
       items.push(rec);
     }
 
@@ -649,7 +654,7 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
 
     const cnNow = new Date(t0 * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
     const runs = (prev.runs || []).slice(0, 40);
-    runs.unshift({ ran_at: new Date(t0 * 1000).toISOString(), win_hours: HOURS, fetched: rawTotal, matched: all.length, fresh: fresh.length, dropped: dropped.length });
+    runs.unshift({ ran_at: new Date(t0 * 1000).toISOString(), win_hours: HOURS, fetched: rawTotal, matched: all.length, fresh: fresh.length, changed: changed.length });
 
     const snap = {
       at: new Date(t0 * 1000).toISOString(),
@@ -662,22 +667,28 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
       digest: prev.digest || {},
     };
     fs.writeFileSync(OUT, JSON.stringify(snap, null, 1));
-    log(`快照写出：${items.length} 条（新增 ${fresh.length}，降价 ${dropped.length}）→ ${OUT}`);
+    log(`快照写出：${items.length} 条（新增 ${fresh.length}，改价 ${changed.length}）→ ${OUT}`);
 
     // ── 钉钉：每小时汇总一次（带集合图，跟卡市同一套）──
-    const hourKey = new Date(t0 * 1000).toISOString().slice(0, 13); // UTC 小时桶
+    /* ⚠️ 别再用「UTC 小时桶」判新小时（dg.hour）：cron 落在 :58 和 :08 两轮跨整点，
+       UTC 小时一变两轮都当成「新的一小时」→ 同一张卡连播两遍（她 11-20 反馈）。
+       改成「距上次成功播报满 55 分钟」，跟触发点落在哪分钟无关，一小时只会发一条。 */
     const dg = snap.digest;
-    if (dg.hour !== hourKey) {
+    const since = Number(dg.flushed_at) || 0;
+    const gapSec = t0 - since;
+    if (!since || gapSec >= 55 * 60) {
       // ⚠️ 必须排除已售：items 里含「本轮没再出现、按残留标成 sold」的旧条目，
       //    播报时它们早就卖掉了，放进「上新/降价」只会误导（她 11-20 明确指出）
-      const newList = items.filter(i => !i.sold && i.first_seen >= t0 - 3600 && (i.first_seen === i.last_seen || i.first_seen > (dg.flushed_at || 0)));
-      const dropList = dropped.filter(i => !i.sold && i.last_seen > (dg.flushed_at || 0));
+      const newList = items.filter(i => !i.sold && i.first_seen > since && i.first_seen >= t0 - 2 * 3600);
+      const dropList = changed.filter(i => !i.sold && (i.last_seen || 0) > since);
       // 无条件进汇总：美区这一小时没动静时日区可能上了新卡，由 pushDigest 自己判断有没有内容
-      const sent = await pushDigest(snap, newList, dropList);
+      const sent = await pushDigest(snap, newList, dropList, since, gapSec > 600 ? gapSec : 3600);
       if (sent) dg.flushed_at = t0;
-      dg.hour = hourKey;
+      delete dg.hour;
       snap.digest = dg;
       fs.writeFileSync(OUT, JSON.stringify(snap, null, 1));
+    } else {
+      log(`距上次播报 ${Math.round(gapSec / 60)} 分钟（未满 55），本轮不汇总`);
     }
   } catch (e) {
     log('异常：', e.message);
@@ -693,19 +704,17 @@ const daiqie = (p, s) => ((Number(p) || 0) + (Number(s) || 0)) * 7.2 + 7;
 const mdName = s => String(s || '').replace(/\[/g, '［').replace(/\]/g, '］').replace(/[\r\n]+/g, ' ').trim();
 
 // 一条卡占一行（钉钉 markdown 里 \n 不换行，段落要空行，所以拆成两行反而翻倍占高）
+// ⚠️ 只显示现价，不标原价（她 11-20 18:24 明确要求）；涨没涨看她自己的判断，段标题已分「上新/改价」
 function cardLines(it, idx) {
   const name = mdName(it.name).slice(0, 30) || '（无标题）';
   const ship = it.ship_usd != null ? `+运${usd2(it.ship_usd)}` : '';
-  // 降价条目显示「原价→现价」
-  const price = (it.prev_price_usd && it.prev_price_usd > (it.price_usd || 0) + 0.009)
-    ? `${usd2(it.prev_price_usd)}→${usd2(it.price_usd)}`
-    : usd2(it.price_usd);
   return [
-    `**${idx}**　[${name}](https://www.mercari.com/us/item/${it.id}/)　${price}${ship} → ¥${it.daiqie}`,
+    `**${idx}**　[${name}](https://www.mercari.com/us/item/${it.id}/)　${usd2(it.price_usd)}${ship} → ¥${it.daiqie}`,
   ];
 }
 
 // 日区：日元原价 + 实时汇率折人民币（JP¥ 是日元、¥ 是人民币，别混）
+// 只显示现价、不标原价（她 11-20 18:24 定的）
 function jpCardLines(it, idx) {
   const name = mdName(it.name_cn || it.name).slice(0, 30) || '（无标题）';
   const jpy = Number(it.price_jpy) || 0;
@@ -716,33 +725,54 @@ function jpCardLines(it, idx) {
 }
 
 /**
- * 读同仓库 main 上的日区快照 mw.json，取最近 winSec 秒内新上架的卡。
- * 注意：日区快照没有历史价格字段，判不了降价，只能判上新（created_ts 是上架时间）。
+ * 读同仓库 main 上的日区快照 mw.json，返回 { fresh: 上新, drops: 改价 }。
+ * - sinceSec＝上次**成功播报**的时刻（快照 digest.flushed_at），作为下界：
+ *   同一张卡绝不会在两轮播报里各出现一次（她 11-20 反馈「播报重复」就是没这个下界）。
+ * - 日区抓取器从 11-20 起会写 prev_price_jpy（＝上一轮价格，价格没变就删掉），
+ *   靠它判「刚改过价」；改完价下一轮 prev 自动消失，所以改价天然只播一次。
  */
-async function fetchJpFresh(winSec) {
+async function fetchJpFresh(winSec, sinceSec) {
   const urls = [
     `https://raw.githubusercontent.com/${REPO}/main/mw.json`,
     `https://cdn.jsdelivr.net/gh/${REPO}@main/mw.json`,
   ];
+  const now = Math.floor(Date.now() / 1000);
+  const fallback = now - winSec;
+  // 有上次播报时间就用它当起点（窗口自动放大，不漏播）；但最多回溯 6 小时，免得首跑把几百张全播了
+  const since = Number(sinceSec) > 0 ? Math.max(Number(sinceSec), now - 6 * 3600) : fallback;
+
+  const pick = (d, tag) => {
+    const all = (d.items || []).filter(it => it && !it.sold);
+    // 日区判售要连续 45 分钟搜不到才打 sold 标记，所以这里再用「45 分钟内还见过」兜一道：
+    // 上架后没几个小时就消失的，多半在播报前已经卖了，不该算进上新。
+    const fresh = all
+      .filter(it => (Number(it.created_ts) || 0) > since
+        && (!it.last_seen || Date.parse(it.last_seen) / 1000 >= now - 45 * 60))
+      .sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
+    const drops = all
+      .filter(it => {
+        const op = Number(it.prev_price_jpy) || 0, np = Number(it.price_jpy) || 0;
+        return op > 0 && np > 0 && op !== np && (Number(it.updated_ts) || 0) > since;
+      })
+      .sort((a, b) => (b.updated_ts || 0) - (a.updated_ts || 0));
+    log(`${tag} ${(d.items || []).length} 张，近 ${Math.round((now - since) / 60)} 分钟：上新 ${fresh.length} 张 / 改价 ${drops.length} 张`);
+    return { fresh, drops };
+  };
+
+  // 本地调试用：US_JP_FILE=<本地 mw.json 路径>，可以拿假数据验证改价播报的排版
+  if (process.env.US_JP_FILE) {
+    try { return pick(JSON.parse(fs.readFileSync(process.env.US_JP_FILE, 'utf8')), '[本地]日区快照'); }
+    catch (e) { log('US_JP_FILE 读取失败：' + e.message); }
+  }
+
   for (const u of urls) {
     const r = await rawGet(u, 25000);
     if (r.status !== 200 || r.buf.length < 5000) { log(`日区快照拉取失败 ${r.status} ${u.slice(0, 48)}`); continue; }
-    try {
-      const d = JSON.parse(r.buf.toString('utf8'));
-      const now = Math.floor(Date.now() / 1000);
-      // 日区判售要连续 45 分钟搜不到才打 sold 标记，所以这里再用「45 分钟内还见过」兜一道：
-      // 上架后没几个小时就消失的，多半在播报前已经卖了，不该算进上新。
-      const list = (d.items || [])
-        .filter(it => it && !it.sold
-          && (Number(it.created_ts) || 0) >= now - winSec
-          && (!it.last_seen || Date.parse(it.last_seen) / 1000 >= now - 45 * 60))
-        .sort((a, b) => (b.created_ts || 0) - (a.created_ts || 0));
-      log(`日区快照 ${(d.items || []).length} 张，近 ${Math.round(winSec / 60)} 分钟上新 ${list.length} 张`);
-      return list;
-    } catch (e) { log('日区快照解析失败：' + e.message); }
+    try { return pick(JSON.parse(r.buf.toString('utf8')), '日区快照'); }
+    catch (e) { log('日区快照解析失败：' + e.message); }
   }
   log('⚠️ 拉不到日区快照，本次汇总只播美区');
-  return [];
+  return { fresh: [], drops: [] };
 }
 
 // 日元 → 人民币实时汇率（1 JPY = ? CNY）。多个免费源依次试，全挂了就不显示换算，绝不写死假汇率。
@@ -806,17 +836,17 @@ function buildMd(p, snap) {
   return L.join('\n');
 }
 
-async function pushDigest(snap, newList, dropList) {
+async function pushDigest(snap, newList, dropList, sinceSec, winSec) {
   let sharp = null;
   try { sharp = require('sharp'); } catch (e) { log('⚠️ 环境里没装 sharp，本轮只发文字'); }
 
-  // 日区：同一小时窗内的上新（日区快照没有历史价，判不了降价）
-  const jpFresh = await fetchJpFresh(3600);
-  JP_RATE = jpFresh.length ? await fetchJpyCny() : 0;
+  // 日区：上次播报之后的上新 + 改价（sinceSec 卡下界，同一张卡不会重播）
+  const jp = await fetchJpFresh(winSec || 3600, sinceSec);
+  const jpFresh = jp.fresh, jpDrops = jp.drops;
+  JP_RATE = (jpFresh.length || jpDrops.length) ? await fetchJpyCny() : 0;
 
   const nShow = newList.slice(0, SHEET_MAX);
   const dShow = dropList.slice(0, SHEET_MAX);
-  const jShow = jpFresh.slice(0, SHEET_MAX);
 
   // 文件名形如 us-new-1120-1503.jpg，pruneImgs 靠这个后缀认时间
   const p2 = n => String(n).padStart(2, '0');
@@ -830,16 +860,13 @@ async function pushDigest(snap, newList, dropList) {
     return '¥' + (Math.abs(v - Math.round(v)) < 0.05 ? Math.round(v) : v.toFixed(1));
   };
   const usLabel = it => ({ p: cny(it.daiqie), s: usd2(it.price_usd) });
-  const usDropLabel = it => {
-    const prevDq = it.prev_price_usd ? (it.prev_price_usd + (it.ship_usd || 0)) * 7.2 + 7 : null;
-    return { p: cny(it.daiqie), s: prevDq ? `原 ${cny(prevDq)}` : usd2(it.price_usd) };
-  };
+  // 改价图：主行人民币现价、副行美元现价（不标原价，她 18:24 定的）
+  const usChgLabel = it => ({ p: cny(it.daiqie), s: usd2(it.price_usd) });
+  // 日区图上的价格：主行大字＝人民币现价，副行小字＝日元现价（不标原价）
   const jpLabel = it => {
     const jpy = Number(it.price_jpy) || 0;
     const y = jpy ? `JP¥${jpy.toLocaleString('en-US')}` : '';
-    return JP_RATE > 0
-      ? { p: cny(jpy * JP_RATE), s: y }
-      : { p: y, s: '' };
+    return JP_RATE > 0 ? { p: cny(jpy * JP_RATE), s: y } : { p: y, s: '' };
   };
 
   const sheet = async (list, name, labeler) => {
@@ -855,23 +882,35 @@ async function pushDigest(snap, newList, dropList) {
     } catch (e) { log('⚠️ 集合图生成失败：' + e.message); return ''; }
   };
 
-  const jpImg = await sheet(jShow, `jp-new-${stamp}.jpg`, jpLabel);
+  /* 日区上新 + 改价合并成一条消息、一张图（日区一天也就几张，拆两条太碎）；
+     条目上只写现价，靠段标题的「上新 N / 改价 M」区分。 */
+  const jpAll = jpFresh.concat(jpDrops);
+  const jpShow = jpAll.slice(0, SHEET_MAX);
+  const jpImg = await sheet(jpShow, `jp-new-${stamp}.jpg`, jpLabel);
   const newImg = await sheet(nShow, `us-new-${stamp}.jpg`, usLabel);
-  const dropImg = await sheet(dShow, `us-drop-${stamp}.jpg`, usDropLabel);
+  const dropImg = await sheet(dShow, `us-drop-${stamp}.jpg`, usChgLabel);
 
-  // 顺序：日区在前（主力），美区上新、美区降价在后
+  // 顺序：日区在前（主力），然后美区上新、美区改价
   const parts = [];
-  if (jShow.length) parts.push(...packCards(jShow, `🇯🇵 日区上新 ${jpFresh.length} 张`, jpImg, jpFresh.length - jShow.length, jpCardLines));
+  if (jpShow.length) {
+    const jpLabelText = `🇯🇵 日区 上新 ${jpFresh.length} 张${jpDrops.length ? ` / 改价 ${jpDrops.length} 张` : ''}`;
+    parts.push(...packCards(jpShow, jpLabelText, jpImg, jpAll.length - jpShow.length, jpCardLines));
+  }
   if (nShow.length) parts.push(...packCards(nShow, `🇺🇸 美区上新 ${newList.length} 条`, newImg, newList.length - nShow.length, cardLines));
-  if (dShow.length) parts.push(...packCards(dShow, `📉 美区降价 ${dropList.length} 条`, dropImg, 0, cardLines));
-  if (!parts.length) { log('本小时日区/美区都没有上新或降价，不发汇总'); return false; }
+  if (dShow.length) {
+    // 纯降价就叫「降价」，混了涨价就叫「改价」（她 11-20：变化也要播，不只有上新）
+    const hasRise = dropList.some(i => (i.price_usd || 0) > (i.prev_price_usd || 0) + 0.009);
+    const usLabelText = hasRise ? `🇺🇸 美区改价 ${dropList.length} 条` : `📉 美区降价 ${dropList.length} 条`;
+    parts.push(...packCards(dShow, usLabelText, dropImg, 0, cardLines));
+  }
+  if (!parts.length) { log('日区/美区都没有上新、改价或降价，不发汇总'); return false; }
 
   const mds = parts.map(p => buildMd(p, snap));
   log('──────── 消息预览 ────────');
   mds.forEach((m, i) => { log(`—— 第 ${i + 1}/${mds.length} 条 ——`); console.log(m); });
   log('──────────────────────────');
 
-  const title = `🃏 章昊小卡 日区${jpFresh.length}/美区${newList.length}${dropList.length ? '降' + dropList.length : ''} · ${snap.at_cn}`;
+  const title = `🃏 章昊小卡 日区${jpFresh.length}新${jpDrops.length ? '/' + jpDrops.length + '改价' : ''} 美区${newList.length}新${dropList.length ? '/' + dropList.length + '改价' : ''} · ${snap.at_cn}`;
   let ok = 0;
   for (let i = 0; i < mds.length; i++) {
     const t = mds.length > 1 ? `${title}（${i + 1}/${mds.length}）` : title;
