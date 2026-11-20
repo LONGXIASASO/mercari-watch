@@ -325,7 +325,7 @@ async function buildSheet(sharp, list, outPath) {
   const W = COLS * CW + (COLS - 1) * GAP + PAD * 2;
   const H = ROWS * CH + (ROWS - 1) * GAP + PAD * 2;
   // 同一张图里所有格子的价格条高度一致，看起来才齐
-  const barH = list.slice(0, n).some(x => x && x.s) ? 42 : 27;
+  const barH = list.slice(0, n).some(x => x && x.s) ? 44 : 28;
 
   const layer = [];
   const overlays = [];
@@ -357,16 +357,16 @@ async function buildSheet(sharp, list, outPath) {
     const sub = String((list[i] && list[i].s) || '');
     if (price) {
       overlays.push(`<rect x="${x}" y="${y + CH - barH}" width="${CW}" height="${barH}" fill="#ffffff" opacity="0.95"/>`);
-      const y1 = sub ? y + CH - barH + 18 : y + CH - 9;
+      const y1 = sub ? y + CH - barH + 21 : y + CH - 9;
       overlays.push(
         `<text x="${x + CW / 2}" y="${y1}" font-family="${SHEET_FONT}" ` +
-        `font-size="${fitFont(price, 17, CW - 10)}" font-weight="bold" fill="#23262d" ` +
+        `font-size="${fitFont(price, 21, CW - 8)}" font-weight="bold" fill="#23262d" ` +
         `text-anchor="middle">${xmlEsc(price)}</text>`
       );
       if (sub) {
         overlays.push(
-          `<text x="${x + CW / 2}" y="${y + CH - 8}" font-family="${SHEET_FONT}" ` +
-          `font-size="${fitFont(sub, 13, CW - 10)}" fill="#df3363" text-anchor="middle">${xmlEsc(sub)}</text>`
+          `<text x="${x + CW / 2}" y="${y + CH - 7}" font-family="${SHEET_FONT}" ` +
+          `font-size="${fitFont(sub, 12, CW - 8)}" fill="#6b7280" text-anchor="middle">${xmlEsc(sub)}</text>`
         );
       }
     }
@@ -795,15 +795,22 @@ async function pushDigest(snap, newList, dropList) {
   const stamp = `${p2(cnDate.getUTCMonth() + 1)}${p2(cnDate.getUTCDate())}-${p2(cnDate.getUTCHours())}${p2(cnDate.getUTCMinutes())}`;
   const tmpDir = path.join(os.tmpdir(), 'us-notify');
 
-  // 图上每格写什么价格：主行大字＝当前价，副行小字＝代切价/原价（她 20 日要的）
-  const usLabel = it => ({ p: usd2(it.price_usd), s: it.daiqie ? `≈¥${it.daiqie}` : '' });
-  const usDropLabel = it => ({
-    p: usd2(it.price_usd),
-    s: it.prev_price_usd ? `原 ${usd2(it.prev_price_usd)}` : '',
-  });
+  // 图上每格写什么价格：主行大字＝人民币（她 20 日强调「人民币最明显」），副行小字＝原币种价格
+  const cny = n => {
+    const v = Number(n) || 0;
+    return '¥' + (Math.abs(v - Math.round(v)) < 0.05 ? Math.round(v) : v.toFixed(1));
+  };
+  const usLabel = it => ({ p: cny(it.daiqie), s: usd2(it.price_usd) });
+  const usDropLabel = it => {
+    const prevDq = it.prev_price_usd ? (it.prev_price_usd + (it.ship_usd || 0)) * 7.2 + 7 : null;
+    return { p: cny(it.daiqie), s: prevDq ? `原 ${cny(prevDq)}` : usd2(it.price_usd) };
+  };
   const jpLabel = it => {
     const jpy = Number(it.price_jpy) || 0;
-    return { p: `JP¥${jpy.toLocaleString('en-US')}`, s: JP_RATE > 0 ? `≈¥${(jpy * JP_RATE).toFixed(1)}` : '' };
+    const y = jpy ? `JP¥${jpy.toLocaleString('en-US')}` : '';
+    return JP_RATE > 0
+      ? { p: cny(jpy * JP_RATE), s: y }
+      : { p: y, s: '' };
   };
 
   const sheet = async (list, name, labeler) => {
