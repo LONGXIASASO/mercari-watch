@@ -129,8 +129,33 @@ async function fetchThumb(u) {
   return null;
 }
 
+/* ---------------- 图上的价格条 ----------------
+ * 她 20 日要的：每张小片上也写价格，人民币最显眼（跟美区统一）。
+ * 主行大字＝主档人民币现价（匹配优先，没有匹配就写速切），副行小字＝另一档。
+ */
+const SHEET_FONT = 'Microsoft YaHei, PingFang SC, Noto Sans CJK SC, DejaVu Sans, Arial, Helvetica, sans-serif';
+const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 估字宽：中文按 1.0em、ASCII 按 0.6em；放不下就往小缩字号（别让价格溢出格子）
+function fitFont(txt, size, maxW) {
+  const w = (s, f) => [...String(s)].reduce((a, ch) => a + (ch.charCodeAt(0) > 127 ? f : f * 0.6), 0);
+  let s = size;
+  while (s > 10 && w(txt, s) > maxW) s -= 1;
+  return s;
+}
+// 一张卡图上写什么价：匹配在前、速切在后（与消息正文的顺序一致）
+function sheetPrices(h) {
+  const ORDER = { '匹配': 0, '速切': 1 };
+  const rows = ((h && h.rows) || []).slice()
+    .sort((a, b) => (ORDER[a.label] == null ? 9 : ORDER[a.label]) - (ORDER[b.label] == null ? 9 : ORDER[b.label]));
+  const one = r => `${r.label} ${r.cny}`;   // r.cny 本身已带 ¥
+  return {
+    p: rows[0] ? one(rows[0]) : '',
+    s: rows[1] ? one(rows[1]) : '',
+  };
+}
+
 /**
- * 把一批卡拼成一张网格集合图，左上角带序号徽章。
+ * 把一批卡拼成一张网格集合图，左上角带序号徽章，底部带价格条。
  * 返回 false 表示没生成（sharp 不可用 / 没有卡）。
  */
 async function buildSheet(sharp, list, outPath) {
@@ -144,6 +169,8 @@ async function buildSheet(sharp, list, outPath) {
   const ROWS = Math.ceil(n / COLS);
   const W = COLS * CW + (COLS - 1) * GAP + PAD * 2;
   const H = ROWS * CH + (ROWS - 1) * GAP + PAD * 2;
+  // 同一张图里所有格子的价格条高度一致，看起来才齐
+  const barH = list.slice(0, n).some(x => x && sheetPrices(x).s) ? 46 : 30;
 
   const layer = [];
   const badges = [];
@@ -164,9 +191,27 @@ async function buildSheet(sharp, list, outPath) {
     const cx = x + 19, cy = y + 19;
     badges.push(
       `<circle cx="${cx}" cy="${cy}" r="15" fill="#DF3363"/>` +
-      `<text x="${cx}" y="${cy + 6}" font-family="Arial, Helvetica, sans-serif" font-size="18" ` +
+      `<text x="${cx}" y="${cy + 6}" font-family="${SHEET_FONT}" font-size="18" ` +
       `font-weight="bold" fill="#ffffff" text-anchor="middle">${i + 1}</text>`
     );
+
+    // 底部价格条：白底深字，压在图上保证任何底图都看得清
+    const { p, s } = sheetPrices(list[i]);
+    if (p) {
+      badges.push(`<rect x="${x}" y="${y + CH - barH}" width="${CW}" height="${barH}" fill="#ffffff" opacity="0.95"/>`);
+      const y1 = s ? y + CH - barH + 22 : y + CH - 10;
+      badges.push(
+        `<text x="${x + CW / 2}" y="${y1}" font-family="${SHEET_FONT}" ` +
+        `font-size="${fitFont(p, 20, CW - 8)}" font-weight="bold" fill="#23262d" ` +
+        `text-anchor="middle">${xmlEsc(p)}</text>`
+      );
+      if (s) {
+        badges.push(
+          `<text x="${x + CW / 2}" y="${y + CH - 8}" font-family="${SHEET_FONT}" ` +
+          `font-size="${fitFont(s, 13, CW - 8)}" fill="#df3363" text-anchor="middle">${xmlEsc(s)}</text>`
+        );
+      }
+    }
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${badges.join('')}</svg>`;
   layer.push({ input: Buffer.from(svg), left: 0, top: 0 });
