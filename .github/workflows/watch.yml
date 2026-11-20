@@ -114,3 +114,13 @@ jobs:
           echo "- 图片库：$(ls imgs 2>/dev/null | grep -v gitkeep | wc -l) 张" >> $GITHUB_STEP_SUMMARY
           echo "- 快照：$(ls -lh mw.json 2>/dev/null | awk '{print $5}')（$(node -e "try{const s=require('./mw.json');console.log(s.items.length+' 条 / 更新 '+s.at)}catch(e){console.log('无')}")）" >> $GITHUB_STEP_SUMMARY
           echo "- 页面：https://mercari-card-watch.app.workbuddy.host/?sharecode=L2A6N4ATZQ" >> $GITHUB_STEP_SUMMARY
+
+      # 美区监控没有可靠的自带 timer（本仓库的 schedule 一次都没触发过），
+      # 所以让日区这一轮顺手把美区也踢一脚 —— 日区是 cron-job.org 每 10 分钟打的，
+      # 这样美区自然跟着 10 分钟一轮，不用再配第二个外部定时器。
+      - name: 顺带触发美区监控
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run us-watch.yml --ref main
