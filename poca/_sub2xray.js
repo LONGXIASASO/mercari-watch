@@ -133,6 +133,88 @@ function vlessOut(uri) {
   };
 }
 
+// ── Clash YAML 订阅（flow 风格：- { name: "美国", type: vmess, ... }）──
+// 她 11-21 换的机场给的是 clash 配置，不是 Shadowrocket 那种 base64 vmess 链接。
+function flowMap(s) {
+  let t = s.trim();
+  if (t.startsWith('{')) t = t.slice(1, t.endsWith('}') ? -1 : undefined);
+  const parts = []; let depth = 0, q = '', buf = '';
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) { buf += c; if (c === q && t[i - 1] !== '\\') q = ''; continue; }
+    if (c === '"' || c === "'") { q = c; buf += c; continue; }
+    if (c === '{' || c === '[') depth++;
+    if (c === '}' || c === ']') depth--;
+    if (c === ',' && depth === 0) { parts.push(buf); buf = ''; continue; }
+    buf += c;
+  }
+  if (buf.trim()) parts.push(buf);
+  const out = {};
+  for (const p of parts) {
+    const k = p.indexOf(':');
+    if (k < 0) continue;
+    const key = p.slice(0, k).trim();
+    let v = p.slice(k + 1).trim();
+    if (v.startsWith('{')) v = flowMap(v);
+    else if (/^".*"$/.test(v) || /^'.*'$/.test(v)) v = v.slice(1, -1);
+    out[key] = v;
+  }
+  return out;
+}
+
+function clashOut(o) {
+  const type = String(o.type || '').toLowerCase();
+  const server = String(o.server || '');
+  const port = Number(o.port) || 443;
+  const net = String(o.network || 'tcp');
+  const tls = o.tls === true || o.tls === 'true';
+  const wsOpts = (o['ws-opts'] && typeof o['ws-opts'] === 'object') ? o['ws-opts'] : {};
+  const wsHead = (wsOpts.headers && typeof wsOpts.headers === 'object') ? wsOpts.headers : {};
+  // 中继节点的 server 是个 IP，TLS 的 SNI 得用 ws 的 Host（真实落地域名），否则握手失败
+  const host = String(wsHead.Host || wsHead.host || o.servername || o.sni || server);
+  const ss = { network: net, security: tls ? 'tls' : 'none' };
+  if (tls) {
+    ss.tlsSettings = {
+      serverName: String(o.servername || o.sni || host),
+      allowInsecure: o['skip-cert-verify'] === true || o['skip-cert-verify'] === 'true',
+    };
+  }
+  if (net === 'ws') ss.wsSettings = { path: String(wsOpts.path || '/'), headers: { Host: host } };
+  else if (net === 'grpc') {
+    const g = (o['grpc-opts'] && typeof o['grpc-opts'] === 'object') ? o['grpc-opts'] : {};
+    ss.grpcSettings = { serviceName: String(g['grpc-service-name'] || '') };
+  }
+  const name = String(o.name || server);
+  if (type === 'vmess') {
+    return { name, out: { protocol: 'vmess', settings: { vnext: [{ address: server, port, users: [{ id: String(o.uuid || ''), alterId: Number(o.alterId || 0), security: 'auto' }] }] }, streamSettings: ss } };
+  }
+  if (type === 'vless') {
+    return { name, out: { protocol: 'vless', settings: { vnext: [{ address: server, port, users: [{ id: String(o.uuid || ''), encryption: 'none', flow: String(o.flow || '') }] }] }, streamSettings: ss } };
+  }
+  if (type === 'trojan') {
+    ss.security = 'tls';
+    return { name, out: { protocol: 'trojan', settings: { servers: [{ address: server, port, password: String(o.password || '') }] }, streamSettings: ss } };
+  }
+  throw new Error('不支持的协议 ' + type);
+}
+
+function clashNodes(text) {
+  const i = text.search(/^proxies:\s*$/m);
+  if (i < 0) return [];
+  const rows = text.slice(i).split(/\r?\n/);
+  const list = [];
+  for (let k = 1; k < rows.length; k++) {
+    const raw = rows[k];
+    if (/^\S/.test(raw) && !raw.startsWith('-')) break;  // 撞到下一个顶层键（proxy-groups / rules）就收工
+    const t = raw.trim();
+    if (!t.startsWith('-')) continue;
+    const body = t.replace(/^-\s*/, '');
+    if (!body.startsWith('{')) continue;                 // 只吃 flow 风格，块风格另说
+    try { list.push(clashOut(flowMap(body))); } catch (e) { console.error('  跳过节点：' + e.message); }
+  }
+  return list;
+}
+
 // 韩国优先：名字里带「韩 / 韩国 / KR / Korea / Seoul」的排前面
 const isKR = n => /韩|韓國|韩国|首尔|首爾|\bKR\b|Korea|Seoul/i.test(n);
 
@@ -149,7 +231,7 @@ const isKR = n => /韩|韓國|韩国|首尔|首爾|\bKR\b|Korea|Seoul/i.test(n);
   // ⚠️ 别用「含 = 就跳过」过滤：vmess:// 的 base64 尾部常有 == 填充，会把所有节点一起扔掉。
   //    只丢订阅头部的 STATUS= / REMARKS= 这类全大写键值行。
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(s => s && !/^[A-Z_]{3,}=/.test(s));
-  const nodes = [];
+  let nodes = [];
   let skipped = 0;
   for (const l of lines) {
     try {
@@ -158,6 +240,10 @@ const isKR = n => /韩|韓國|韩国|首尔|首爾|\bKR\b|Korea|Seoul/i.test(n);
       else if (l.startsWith('vless://')) nodes.push(vlessOut(l));
       else skipped++;
     } catch (e) { skipped++; }
+  }
+  if (!nodes.length && /^proxies:/m.test(text)) {
+    nodes = clashNodes(text);
+    console.log(`  订阅是 Clash 格式，解析出 ${nodes.length} 个节点`);
   }
   if (!nodes.length) { console.error('订阅里没解析出可用节点'); process.exit(4); }
   // 韩国优先，其余按原序
