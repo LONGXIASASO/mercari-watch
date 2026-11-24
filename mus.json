@@ -1,10 +1,54 @@
 {
- "at": "2026-11-24T20:30:02.000Z",
- "at_cn": "11/25 04:30",
+ "at": "2026-11-24T20:40:06.000Z",
+ "at_cn": "11/25 04:40",
  "window_hours": 72,
  "rate": 7.2,
  "fee": 7,
  "items": [
+  {
+   "id": "m96773595283",
+   "name": "ZB1 zhang hao pc",
+   "name_cn": "",
+   "price_usd": 4,
+   "orig_price_usd": 4,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
+   "created_ts": 1795552584,
+   "updated_ts": 1795552584,
+   "list_ts": 1795552584,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m96773595283_1.jpg?1795552584&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m96773595283_1.jpg?1795552584",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "zb1 hao",
+   "seller": "kazu",
+   "seller_id": 439019862,
+   "first_seen": 1795552806,
+   "last_seen": 1795552806,
+   "prev_price_usd": null
+  },
+  {
+   "id": "m84499972519",
+   "name": "ZB1 zhang hao pc",
+   "name_cn": "",
+   "price_usd": 4,
+   "orig_price_usd": 4,
+   "ship_usd": 0.49,
+   "daiqie": 39.3,
+   "created_ts": 1795552525,
+   "updated_ts": 1795552525,
+   "list_ts": 1795552525,
+   "thumb_url": "https://u-mercari-images.mercdn.net/photos/m84499972519_1.jpg?1795552525&width=200&height=200",
+   "img_url": "https://u-mercari-images.mercdn.net/photos/m84499972519_1.jpg?1795552525",
+   "sold": false,
+   "cond_id": null,
+   "query_label": "zb1 hao",
+   "seller": "kazu",
+   "seller_id": 439019862,
+   "first_seen": 1795552806,
+   "last_seen": 1795552806,
+   "prev_price_usd": null
+  },
   {
    "id": "m91123913901",
    "name": "And2ble Zhang Hao makestar pob",
@@ -24,7 +68,7 @@
    "seller": "leilani",
    "seller_id": 226277426,
    "first_seen": 1795502993,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 7
   },
   {
@@ -46,7 +90,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492850,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -68,7 +112,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492850,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -90,7 +134,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492850,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -112,7 +156,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492850,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -134,7 +178,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -156,7 +200,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -178,7 +222,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -200,7 +244,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -222,7 +266,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -244,7 +288,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795492196,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -266,7 +310,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795491615,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -288,7 +332,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795491615,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 14
   },
   {
@@ -310,7 +354,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795491615,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -332,7 +376,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795491615,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -354,7 +398,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795490991,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -376,7 +420,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795490394,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -398,7 +442,7 @@
    "seller": "cherrybearry316",
    "seller_id": 613345758,
    "first_seen": 1795490394,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -420,7 +464,7 @@
    "seller": "Binnie (Read Bio!)",
    "seller_id": 187172127,
    "first_seen": 1795479597,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 1.9
   },
   {
@@ -442,7 +486,7 @@
    "seller": "Dulce",
    "seller_id": 544430007,
    "first_seen": 1795464591,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.79
   },
   {
@@ -464,7 +508,7 @@
    "seller": "Dulce",
    "seller_id": 544430007,
    "first_seen": 1795461074,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.79
   },
   {
@@ -486,7 +530,7 @@
    "seller": "ZZZ",
    "seller_id": 167282332,
    "first_seen": 1795446591,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 35
   },
   {
@@ -508,7 +552,7 @@
    "seller": "Ellie",
    "seller_id": 736601681,
    "first_seen": 1795407007,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -530,7 +574,7 @@
    "seller": "I S A ;)",
    "seller_id": 174428066,
    "first_seen": 1795403389,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.5
   },
   {
@@ -552,7 +596,7 @@
    "seller": "snowy.haohao",
    "seller_id": 464816115,
    "first_seen": 1795398594,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 18
   },
   {
@@ -574,7 +618,7 @@
    "seller": "snowy.haohao",
    "seller_id": 464816115,
    "first_seen": 1795397991,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 30
   },
   {
@@ -596,7 +640,7 @@
    "seller": "april",
    "seller_id": 407493734,
    "first_seen": 1795385990,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -618,7 +662,7 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795381192,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -640,7 +684,7 @@
    "seller": "sillykittyricky",
    "seller_id": 224311387,
    "first_seen": 1795363192,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -662,7 +706,7 @@
    "seller": "wonscloud_",
    "seller_id": 696106455,
    "first_seen": 1795326597,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -684,7 +728,7 @@
    "seller": "april",
    "seller_id": 407493734,
    "first_seen": 1795318789,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -706,7 +750,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795317586,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2.5
   },
   {
@@ -728,7 +772,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795314608,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.5
   },
   {
@@ -750,7 +794,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795314608,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -772,7 +816,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795313404,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -794,7 +838,7 @@
    "seller": "starstashco",
    "seller_id": 343858330,
    "first_seen": 1795309817,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -860,7 +904,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795308002,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3.5
   },
   {
@@ -882,7 +926,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795308002,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -904,7 +948,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795308002,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2.5
   },
   {
@@ -926,7 +970,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795308002,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -948,7 +992,7 @@
    "seller": "krystalgeneration",
    "seller_id": 872929336,
    "first_seen": 1795298996,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2
   },
   {
@@ -970,7 +1014,7 @@
    "seller": "hannahnicole95",
    "seller_id": 972428935,
    "first_seen": 1795283418,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 7.22
   },
   {
@@ -992,7 +1036,7 @@
    "seller": "jess",
    "seller_id": 854112869,
    "first_seen": 1795237793,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15
   },
   {
@@ -1014,7 +1058,7 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795225198,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.6
   },
   {
@@ -1036,7 +1080,7 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795225198,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.6
   },
   {
@@ -1058,7 +1102,7 @@
    "seller": "citrusfairy :D",
    "seller_id": 555634183,
    "first_seen": 1795208986,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.99
   },
   {
@@ -1080,7 +1124,7 @@
    "seller": "Lillian",
    "seller_id": 416098306,
    "first_seen": 1795195201,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15
   },
   {
@@ -1102,7 +1146,7 @@
    "seller": "jords",
    "seller_id": 214267295,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -1124,7 +1168,7 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -1146,7 +1190,7 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -1168,7 +1212,7 @@
    "seller": "☆Please read my bio☆",
    "seller_id": 570093996,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 29
   },
   {
@@ -1190,7 +1234,7 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.5
   },
   {
@@ -1212,7 +1256,7 @@
    "seller": "bingsusu",
    "seller_id": 180714328,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 20
   },
   {
@@ -1234,7 +1278,7 @@
    "seller": "bingsusu",
    "seller_id": 180714328,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -1256,7 +1300,7 @@
    "seller": "svnoozs",
    "seller_id": 257267488,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -1278,7 +1322,7 @@
    "seller": "K & L",
    "seller_id": 878897059,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.5
   },
   {
@@ -1300,7 +1344,7 @@
    "seller": "strawbeary",
    "seller_id": 234033564,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -1322,7 +1366,7 @@
    "seller": "shazzi",
    "seller_id": 784316310,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.86
   },
   {
@@ -1366,7 +1410,7 @@
    "seller": "Kat ✨",
    "seller_id": 295156475,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -1388,7 +1432,7 @@
    "seller": "☆Please read my bio☆",
    "seller_id": 570093996,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 28
   },
   {
@@ -1410,7 +1454,7 @@
    "seller": "C. 。. )",
    "seller_id": 563997618,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -1432,7 +1476,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1454,7 +1498,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1476,7 +1520,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1498,7 +1542,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1520,7 +1564,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1542,7 +1586,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1564,7 +1608,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1586,7 +1630,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1608,7 +1652,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1630,7 +1674,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1652,7 +1696,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1674,7 +1718,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1696,7 +1740,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1718,7 +1762,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -1740,7 +1784,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 22.99
   },
   {
@@ -1762,7 +1806,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 7.99
   },
   {
@@ -1784,7 +1828,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.49
   },
   {
@@ -1806,7 +1850,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.99
   },
   {
@@ -1828,7 +1872,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.99
   },
   {
@@ -1850,7 +1894,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.99
   },
   {
@@ -1872,7 +1916,7 @@
    "seller": "risgyunini",
    "seller_id": 409619477,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 35
   },
   {
@@ -1894,7 +1938,7 @@
    "seller": "\\u003C33",
    "seller_id": 776374124,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 14
   },
   {
@@ -1916,7 +1960,7 @@
    "seller": "Madison",
    "seller_id": 677890707,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -1938,7 +1982,7 @@
    "seller": "madi_sweets",
    "seller_id": 584516071,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4.5
   },
   {
@@ -1960,7 +2004,7 @@
    "seller": "chaooos.sales",
    "seller_id": 130266761,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3.5
   },
   {
@@ -1982,7 +2026,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 28.5
   },
   {
@@ -2004,7 +2048,7 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3.99
   },
   {
@@ -2026,7 +2070,7 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -2048,7 +2092,7 @@
    "seller": "Niniz (check bio)",
    "seller_id": 870871440,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2070,7 +2114,7 @@
    "seller": "CrmPuffPowe(Read Bio",
    "seller_id": 835177325,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 32
   },
   {
@@ -2092,7 +2136,7 @@
    "seller": "Kat ✨",
    "seller_id": 295156475,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -2114,7 +2158,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 16
   },
   {
@@ -2136,7 +2180,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795311592,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -2158,7 +2202,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795314608,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2180,7 +2224,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795484398,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2202,7 +2246,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795494602,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2224,7 +2268,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795318201,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2246,7 +2290,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795490991,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2268,7 +2312,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795476599,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -2290,7 +2334,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795318201,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2312,7 +2356,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2334,7 +2378,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795321187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2356,7 +2400,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795493993,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2378,7 +2422,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795472394,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -2400,7 +2444,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795483265,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -2422,7 +2466,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795314011,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2444,7 +2488,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795468800,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2466,7 +2510,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2488,7 +2532,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795321187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2510,7 +2554,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795475991,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.42
   },
   {
@@ -2532,7 +2576,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795475991,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.19
   },
   {
@@ -2554,7 +2598,7 @@
    "seller": "wiz.bit",
    "seller_id": 242385585,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.99
   },
   {
@@ -2576,7 +2620,7 @@
    "seller": "amanda ♡",
    "seller_id": 252712837,
    "first_seen": 1795323600,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -2598,7 +2642,7 @@
    "seller": "levxnter",
    "seller_id": 614782159,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -2620,7 +2664,7 @@
    "seller": "ultbhy",
    "seller_id": 377073895,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -2642,7 +2686,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 21.99
   },
   {
@@ -2664,7 +2708,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15.99
   },
   {
@@ -2686,7 +2730,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 14.99
   },
   {
@@ -2708,7 +2752,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 13.99
   },
   {
@@ -2730,7 +2774,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.99
   },
   {
@@ -2752,7 +2796,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.99
   },
   {
@@ -2774,7 +2818,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.49
   },
   {
@@ -2796,7 +2840,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 19.99
   },
   {
@@ -2818,7 +2862,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.99
   },
   {
@@ -2840,7 +2884,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.99
   },
   {
@@ -2862,7 +2906,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.99
   },
   {
@@ -2884,7 +2928,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.49
   },
   {
@@ -2906,7 +2950,7 @@
    "seller": "ally h",
    "seller_id": 673686474,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -2928,7 +2972,7 @@
    "seller": "kay\\u003C3",
    "seller_id": 708999261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -2950,7 +2994,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.03
   },
   {
@@ -2972,7 +3016,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.11
   },
   {
@@ -2994,7 +3038,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -3016,7 +3060,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.03
   },
   {
@@ -3038,7 +3082,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.03
   },
   {
@@ -3060,7 +3104,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.03
   },
   {
@@ -3082,7 +3126,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.5
   },
   {
@@ -3104,7 +3148,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -3126,7 +3170,7 @@
    "seller": "purpleluv24",
    "seller_id": 228398959,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3.87
   },
   {
@@ -3170,7 +3214,7 @@
    "seller": "FelixNavidad",
    "seller_id": 279319332,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -3192,7 +3236,7 @@
    "seller": "Wintertwist",
    "seller_id": 327525905,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -3214,7 +3258,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -3236,7 +3280,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -3258,7 +3302,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -3302,7 +3346,7 @@
    "seller": "abby!",
    "seller_id": 449207037,
    "first_seen": 1795165799,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2
   },
   {
@@ -3324,7 +3368,7 @@
    "seller": "abby!",
    "seller_id": 449207037,
    "first_seen": 1795165799,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -3346,7 +3390,7 @@
    "seller": "Ariii",
    "seller_id": 485053681,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -3368,7 +3412,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 22
   },
   {
@@ -3390,7 +3434,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 30
   },
   {
@@ -3412,7 +3456,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15
   },
   {
@@ -3434,7 +3478,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12
   },
   {
@@ -3456,7 +3500,7 @@
    "seller": "rickyhao_520725",
    "seller_id": 351641261,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 18
   },
   {
@@ -3478,7 +3522,7 @@
    "seller": "laewqs",
    "seller_id": 184337898,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -3500,7 +3544,7 @@
    "seller": "Jihyo's Ball Pit",
    "seller_id": 773735359,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2.85
   },
   {
@@ -3522,7 +3566,7 @@
    "seller": "haobing",
    "seller_id": 356208502,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -3654,7 +3698,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 23.99
   },
   {
@@ -3676,7 +3720,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 23.99
   },
   {
@@ -3698,7 +3742,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 16.99
   },
   {
@@ -3720,7 +3764,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15.99
   },
   {
@@ -3742,7 +3786,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 17.49
   },
   {
@@ -3764,7 +3808,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 17.49
   },
   {
@@ -3786,7 +3830,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.49
   },
   {
@@ -3808,7 +3852,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.49
   },
   {
@@ -3830,7 +3874,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.99
   },
   {
@@ -3852,7 +3896,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15.99
   },
   {
@@ -3874,7 +3918,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15.99
   },
   {
@@ -3896,7 +3940,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.49
   },
   {
@@ -3918,7 +3962,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.99
   },
   {
@@ -3940,7 +3984,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.99
   },
   {
@@ -4226,7 +4270,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795373389,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -4248,7 +4292,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -4270,7 +4314,7 @@
    "seller": "Tina (read bio!)",
    "seller_id": 288239054,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.11
   },
   {
@@ -4292,7 +4336,7 @@
    "seller": "Minmin",
    "seller_id": 959048177,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -4314,7 +4358,7 @@
    "seller": "www",
    "seller_id": 668038377,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15
   },
   {
@@ -4336,7 +4380,7 @@
    "seller": "and2dawn",
    "seller_id": 905417731,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10.71
   },
   {
@@ -4358,7 +4402,7 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -4380,7 +4424,7 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.6
   },
   {
@@ -4402,7 +4446,7 @@
    "seller": "auggloz",
    "seller_id": 857788015,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 7
   },
   {
@@ -4424,7 +4468,7 @@
    "seller": "AmandaMckenna",
    "seller_id": 121367327,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -4446,7 +4490,7 @@
    "seller": "yutami",
    "seller_id": 660209387,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 23.75
   },
   {
@@ -4468,7 +4512,7 @@
    "seller": "AmandaMckenna",
    "seller_id": 121367327,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9
   },
   {
@@ -4490,7 +4534,7 @@
    "seller": "citrusfairy :D",
    "seller_id": 555634183,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 16.99
   },
   {
@@ -4512,7 +4556,7 @@
    "seller": "BE0MGYU",
    "seller_id": 370661168,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.99
   },
   {
@@ -4534,7 +4578,7 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.5
   },
   {
@@ -4556,7 +4600,7 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 10
   },
   {
@@ -4578,7 +4622,7 @@
    "seller": "taeluvr93",
    "seller_id": 684572846,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 23
   },
   {
@@ -4600,7 +4644,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795165799,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.5
   },
   {
@@ -4622,7 +4666,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -4688,7 +4732,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -4710,7 +4754,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8
   },
   {
@@ -4732,7 +4776,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 1
   },
   {
@@ -4754,7 +4798,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2
   },
   {
@@ -4798,7 +4842,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -4842,7 +4886,7 @@
    "seller": "rikayangi",
    "seller_id": 510992578,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 1
   },
   {
@@ -4864,7 +4908,7 @@
    "seller": "Kiran",
    "seller_id": 814674035,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -4886,7 +4930,7 @@
    "seller": "starstashco",
    "seller_id": 343858330,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 25
   },
   {
@@ -4908,7 +4952,7 @@
    "seller": "(Read Bio) ttsand",
    "seller_id": 408694463,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 18.5
   },
   {
@@ -4952,7 +4996,7 @@
    "seller": "drewski",
    "seller_id": 444109299,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -4974,7 +5018,7 @@
    "seller": "Kikii",
    "seller_id": 648251500,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -5018,7 +5062,7 @@
    "seller": "Secretyunhosociety",
    "seller_id": 559574006,
    "first_seen": 1795157388,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 30
   },
   {
@@ -5106,7 +5150,7 @@
    "seller": "ranees_1",
    "seller_id": 745783712,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.5
   },
   {
@@ -5128,7 +5172,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -5172,7 +5216,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -5194,7 +5238,7 @@
    "seller": "taoy_peach",
    "seller_id": 174369348,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4
   },
   {
@@ -5238,7 +5282,7 @@
    "seller": "sakaiyeon",
    "seller_id": 653757429,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6
   },
   {
@@ -5260,7 +5304,7 @@
    "seller": "sakaiyeon",
    "seller_id": 653757429,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5.7
   },
   {
@@ -5326,7 +5370,7 @@
    "seller": "christineb101",
    "seller_id": 701597141,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 2
   },
   {
@@ -5392,7 +5436,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.03
   },
   {
@@ -5414,7 +5458,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.4
   },
   {
@@ -5436,7 +5480,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.86
   },
   {
@@ -5458,7 +5502,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 9.29
   },
   {
@@ -5480,7 +5524,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.51
   },
   {
@@ -5502,7 +5546,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 11.66
   },
   {
@@ -5524,7 +5568,7 @@
    "seller": "Ellen Wang",
    "seller_id": 514558957,
    "first_seen": 1795158838,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 8.14
   },
   {
@@ -5612,7 +5656,7 @@
    "seller": "rei",
    "seller_id": 446059082,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -5634,7 +5678,7 @@
    "seller": "rei",
    "seller_id": 446059082,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -5656,7 +5700,7 @@
    "seller": "rei",
    "seller_id": 446059082,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 3
   },
   {
@@ -5678,7 +5722,7 @@
    "seller": "Lillian",
    "seller_id": 416098306,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15
   },
   {
@@ -5700,7 +5744,7 @@
    "seller": "Lillian",
    "seller_id": 416098306,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 18
   },
   {
@@ -5722,7 +5766,7 @@
    "seller": "Lillian",
    "seller_id": 416098306,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 14
   },
   {
@@ -5766,7 +5810,7 @@
    "seller": "C2670609",
    "seller_id": 553856721,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 5
   },
   {
@@ -5810,7 +5854,7 @@
    "seller": "citrusfairy :D",
    "seller_id": 555634183,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 369.99
   },
   {
@@ -5832,7 +5876,7 @@
    "seller": "qqyesqq(read bio)",
    "seller_id": 381848193,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 27.07
   },
   {
@@ -5854,7 +5898,7 @@
    "seller": "citrusfairy :D",
    "seller_id": 555634183,
    "first_seen": 1795164323,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 4.99
   },
   {
@@ -6074,7 +6118,7 @@
    "seller": "mattchurro",
    "seller_id": 769302393,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 6.37
   },
   {
@@ -6096,7 +6140,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.99
   },
   {
@@ -6118,7 +6162,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.24
   },
   {
@@ -6140,7 +6184,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 12.24
   },
   {
@@ -6162,7 +6206,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 15.99
   },
   {
@@ -6184,7 +6228,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 19.99
   },
   {
@@ -6206,7 +6250,7 @@
    "seller": "fantasists",
    "seller_id": 174171590,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 13.99
   },
   {
@@ -6228,11 +6272,19 @@
    "seller": "C_svt",
    "seller_id": 778481752,
    "first_seen": 1795158187,
-   "last_seen": 1795552202,
+   "last_seen": 1795552806,
    "prev_price_usd": 7.42
   }
  ],
  "runs": [
+  {
+   "ran_at": "2026-11-24T20:40:06.000Z",
+   "win_hours": 72,
+   "fetched": 562,
+   "matched": 234,
+   "fresh": 2,
+   "changed": 0
+  },
   {
    "ran_at": "2026-11-24T20:30:02.000Z",
    "win_hours": 72,
@@ -6550,14 +6602,6 @@
    "win_hours": 72,
    "fetched": 562,
    "matched": 225,
-   "fresh": 0,
-   "changed": 0
-  },
-  {
-   "ran_at": "2026-11-24T14:01:06.000Z",
-   "win_hours": 72,
-   "fetched": 347,
-   "matched": 157,
    "fresh": 0,
    "changed": 0
   }
