@@ -265,6 +265,42 @@ jobs:
           POCA_PIN_DETAIL: ${{ github.event.inputs.pin_detail }}
         run: |
           MODE=""; PROXYURL=""; FOUND=""; REASON=""; DETAIL=""
+
+          # ── 小时闸门（2026-11-28 15:40 用户定：等待站方恢复期间，卡市实际尝试降到 1 小时 1 次）──
+          # 外部触发源仍是 cron-job.org 每 10 分钟一次，闸门在这里自己挡，**外部定时器不用改**。
+          # 判据是「上次真尝试」而不是「上次成功」，所以停更期间也照样挡得住（这是关键：
+          # 失败轮不写 state.json，光靠 --min-gap 2 在停更期完全挡不住，10 分钟就白烧一轮探测）。
+          # 心跳单独放 **poca-beat 分支**（只放 beat.txt 一个文件、force push），
+          # ⛔ 绝不写进 poca-data：那里每轮 force push，11-06 就是这么把 3304 个价格点冲掉的。
+          # 先写心跳再抓：这一小时用掉了就算用掉了，避免「抓失败 → 心跳没更新 → 10 分钟后又来一遍」。
+          # 手动轮（deep / pin_detail / force_mode）一律不受闸门限制，随时能立刻抓一次。
+          # 🔧 恢复 10 分钟节奏：把下面的 3300 改成 0（或整段删掉）。
+          GATE_SKIP_MIN="${POCA_HOUR_GATE:-3300}"
+          if [ "${{ github.event.inputs.deep }}" = "1" ] || [ -n "${{ github.event.inputs.pin_detail }}" ] || [ -n "${{ github.event.inputs.force_mode }}" ]; then
+            echo "🔓 手动轮（deep/pin_detail/force_mode）→ 跳过小时闸门，立即抓取"
+          elif [ "$GATE_SKIP_MIN" -gt 0 ]; then
+            NOWS=$(date +%s)
+            BEAT=$(curl -sL --max-time 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-beat/beat.txt?t=$NOWS" | grep -oE '^[0-9]{10}$' | head -1)
+            if [ -n "$BEAT" ] && [ $((NOWS - BEAT)) -lt "$GATE_SKIP_MIN" ]; then
+              echo "⏳ 小时闸门：距上次尝试 $(( (NOWS - BEAT) / 60 )) 分钟（< $(( GATE_SKIP_MIN / 60 )) 分钟），本轮不抓"
+              echo "SKIP=1" >> "$GITHUB_ENV"
+              echo "GATE_REASON=HOUR_GATE" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "✅ 小时闸门放行（上次尝试 ${BEAT:-无记录}，现在 $NOWS）"
+            mkdir -p /tmp/beat && printf '%s\n' "$NOWS" > /tmp/beat/beat.txt
+            ( cd /tmp/beat \
+              && git init -q -b poca-beat \
+              && git config user.name "poca-watch-bot" \
+              && git config user.email "poca-watch-bot@users.noreply.github.com" \
+              && git add -A && git commit -q -m "beat $NOWS" \
+              && git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/poca-beat ) \
+              && echo "💓 心跳已写入 poca-beat：$NOWS" \
+              || echo "⚠️ 心跳写入失败（只影响下一轮闸门判断，不影响本轮抓取）"
+          else
+            echo "ℹ️ 小时闸门已关闭（POCA_HOUR_GATE=$GATE_SKIP_MIN），按外部定时器节奏跑"
+          fi
+
           # ── 平台适配（windows-latest 是当前实际执行路径，#2638 之后不要再删）──
           # xray 可执行文件在 Windows 上带 .exe；关进程不能用 pkill（Git Bash 里没有）。
           # ⚠️ 这不只是「为 Windows 写的兼容分支」：整个 job 就只在 windows-latest 上跑，
@@ -515,6 +551,12 @@ jobs:
 
       - name: 确认产物
         run: |
+          # 小时闸门跳过：直接结束。⚠️ 不能往下走——poca/ 里是「取上一次的状态」拉下来的旧 data.json，
+          # 拿它去打印会误判成「本轮成功」，推送/发布也会基于旧数据跑一遍。
+          if [ "$SKIP" = "1" ]; then
+            echo "⏭ 本轮被小时闸门跳过，无动作"
+            exit 0
+          fi
           # 被节流跳过时没有新的 data.json，直接结束本轮（不算失败）
           if [ ! -s poca/data.json ]; then
             echo "⏭ 本轮跳过（距上次成功不足 2 分钟，节流），没有新产物"
