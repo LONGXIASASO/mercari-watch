@@ -280,7 +280,9 @@ jobs:
             echo "🔓 手动轮（deep/pin_detail/force_mode）→ 跳过小时闸门，立即抓取"
           elif [ "$GATE_SKIP_MIN" -gt 0 ]; then
             NOWS=$(date +%s)
-            BEAT=$(curl -sL --max-time 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-beat/beat.txt?t=$NOWS" | grep -oE '^[0-9]{10}$' | head -1)
+            # ⚠️ 结尾 must 有 `|| true`：脚本是 `bash -e -o pipefail`，分支不存在时 raw 返回 404 页、
+            #    grep 一条都匹配不上会返回 1，整个 pipeline 就变成 1，set -e 直接把这步杀掉（#4822 实测踩到）。
+            BEAT=$(curl -sL --max-time 20 "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/poca-beat/beat.txt?t=$NOWS" | grep -oE '^[0-9]{10}$' | head -1 || true)
             if [ -n "$BEAT" ] && [ $((NOWS - BEAT)) -lt "$GATE_SKIP_MIN" ]; then
               echo "⏳ 小时闸门：距上次尝试 $(( (NOWS - BEAT) / 60 )) 分钟（< $(( GATE_SKIP_MIN / 60 )) 分钟），本轮不抓"
               echo "SKIP=1" >> "$GITHUB_ENV"
