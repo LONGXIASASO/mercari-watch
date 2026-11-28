@@ -1,9 +1,9 @@
 {
  "poca.yml": {
-  "alerted": "fail",
-  "since": "2026-11-28T04:02:28.889Z",
+  "alerted": "stale",
+  "since": "2026-11-28T07:47:24.465Z",
   "at": "2026-11-28T03:21:16.006Z",
-  "age": 41,
-  "fails": 5
+  "age": 266,
+  "fails": 0
  }
 }
